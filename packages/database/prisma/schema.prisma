@@ -7,8 +7,172 @@ generator client {
   provider = "prisma-client-js"
 }
 
-// Initial baseline model for system connection verification
-// Business-domain models will be added in Phase 2+ (P07+)
+enum UserRole {
+  OWNER
+  MANAGER
+  INSTRUCTOR
+  RECEPTIONIST
+}
+
+enum MemberStatus {
+  INVITED
+  ACTIVE
+  SUSPENDED
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  REVOKED
+  EXPIRED
+}
+
+model User {
+  id               String                 @id @default(uuid())
+  email            String                 @unique
+  phone            String?
+  fullName         String
+  isEmailVerified  Boolean                @default(false)
+  isPhoneVerified  Boolean                @default(false)
+  avatarUrl        String?
+  createdAt        DateTime               @default(now())
+  updatedAt        DateTime               @updatedAt
+  deletedAt        DateTime?
+
+  credentials      UserCredential[]
+  sessions         Session[]
+  resetTokens      PasswordResetToken[]
+  memberships      OrganizationMember[]
+  sentInvitations  Invitation[]           @relation("InvitedByUser")
+  auditLogs        AuditLog[]
+
+  @@index([email])
+  @@index([phone])
+}
+
+model UserCredential {
+  id          String   @id @default(uuid())
+  userId      String
+  type        String   @default("PASSWORD") // PASSWORD, OAUTH_GOOGLE, etc.
+  secretHash  String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, type])
+}
+
+model PasswordResetToken {
+  id          String    @id @default(uuid())
+  userId      String
+  tokenHash   String    @unique
+  expiresAt   DateTime
+  usedAt      DateTime?
+  createdAt   DateTime  @default(now())
+
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tokenHash])
+}
+
+model Session {
+  id              String    @id @default(uuid())
+  userId          String
+  tokenHash       String    @unique
+  activeTenantId  String?
+  userAgent       String?
+  ipAddress       String?
+  expiresAt       DateTime
+  revokedAt       DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([tokenHash])
+  @@index([expiresAt])
+}
+
+model Organization {
+  id               String               @id @default(uuid())
+  name             String
+  slug             String               @unique
+  legalEntityName  String?
+  currency         String               @default("INR")
+  timezone         String               @default("Asia/Kolkata")
+  isGstRegistered  Boolean              @default(false)
+  gstin            String?
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+  deletedAt        DateTime?
+
+  members          OrganizationMember[]
+  invitations      Invitation[]
+  auditLogs        AuditLog[]
+
+  @@index([slug])
+}
+
+model OrganizationMember {
+  id          String        @id @default(uuid())
+  tenantId    String
+  userId      String
+  role        UserRole      @default(INSTRUCTOR)
+  status      MemberStatus  @default(ACTIVE)
+  branchScope Json?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  organization Organization @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, userId])
+  @@index([tenantId, role])
+  @@index([userId])
+}
+
+model Invitation {
+  id              String           @id @default(uuid())
+  tenantId        String
+  email           String
+  role            UserRole         @default(INSTRUCTOR)
+  tokenHash       String           @unique
+  status          InvitationStatus @default(PENDING)
+  invitedByUserId String
+  expiresAt       DateTime
+  acceptedAt      DateTime?
+  createdAt       DateTime         @default(now())
+
+  organization    Organization     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  invitedByUser   User             @relation("InvitedByUser", fields: [invitedByUserId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, status])
+  @@index([email])
+  @@index([tokenHash])
+}
+
+model AuditLog {
+  id           String        @id @default(uuid())
+  tenantId     String?
+  userId       String?
+  action       String
+  resourceType String
+  resourceId   String?
+  ipAddress    String?
+  userAgent    String?
+  details      Json?
+  createdAt    DateTime      @default(now())
+
+  organization Organization? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user         User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, createdAt])
+  @@index([userId])
+  @@index([action])
+}
+
 model SystemHealthCheck {
   id        String   @id @default(uuid())
   checkedAt DateTime @default(now())

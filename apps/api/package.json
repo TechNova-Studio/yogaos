@@ -7,7 +7,8 @@
     "dev": "tsx watch src/main.ts",
     "start": "node dist/main.js",
     "clean": "rimraf dist",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
     "@fastify/cookie": "^11.0.2",
@@ -20,6 +21,7 @@
     "@yogaos/database": "workspace:*",
     "@yogaos/logger": "workspace:*",
     "@yogaos/permissions": "workspace:*",
+    "bcryptjs": "^3.0.3",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
     "fastify": "^5.2.1",
@@ -27,9 +29,13 @@
     "rxjs": "^7.8.2"
   },
   "devDependencies": {
+    "@types/bcryptjs": "^3.0.0",
     "@types/node": "^22.13.9",
+    "@types/supertest": "^7.2.1",
     "rimraf": "^6.0.1",
+    "supertest": "^7.3.2",
     "tsx": "^4.19.3",
-    "typescript": "^5.8.2"
+    "typescript": "^5.8.2",
+    "vitest": "^5.1.0"
   }
 }
