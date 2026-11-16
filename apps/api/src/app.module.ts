@@ -11,6 +11,8 @@ import { ClassesModule } from './modules/classes/classes.module.js';
 import { BookingsModule } from './modules/bookings/bookings.module.js';
 import { StudentPlansModule } from './modules/student-plans/student-plans.module.js';
 import { BillingModule } from './modules/billing/billing.module.js';
+import { MediaModule } from './modules/media/media.module.js';
+import { AsanaModule } from './modules/asana/asana.module.js';
 
 @Module({
   imports: [
@@ -26,6 +28,8 @@ import { BillingModule } from './modules/billing/billing.module.js';
     BookingsModule,
     StudentPlansModule,
     BillingModule,
+    MediaModule,
+    AsanaModule,
   ],
 })
 export class AppModule {}

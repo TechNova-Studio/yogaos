@@ -10,3 +10,4 @@ export * from './booking.js';
 export * from './membership.js';
 export * from './billing.js';
 export * from './renewals-gateways.js';
+export * from './asana.js';

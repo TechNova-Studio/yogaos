@@ -106,6 +106,8 @@ model User {
   paymentsRecorded         PaymentTransaction[]      @relation("PaymentsRecordedByUser")
   refundsProcessed         RefundRecord[]            @relation("RefundsProcessedByUser")
   creditNotesIssued        CreditNote[]              @relation("CreditNotesIssuedByUser")
+  uploadedMedia            MediaAsset[]              @relation("MediaUploadedByUser")
+  createdAsanas            Asana[]                   @relation("AsanasCreatedByUser")
 
   @@index([email])
   @@index([phone])
@@ -196,6 +198,8 @@ model Organization {
   gatewayConfigs          PaymentGatewayConfig[]
   billingReminders        BillingReminder[]
   webhookEvents           WebhookEvent[]
+  asanas                  Asana[]
+  mediaAssets             MediaAsset[]
 
   @@index([slug])
 }
@@ -1119,4 +1123,132 @@ model BillingReminder {
 
   @@index([tenantId, studentId, reminderType])
   @@index([tenantId, status, scheduledFor])
+}
+
+enum AsanaCategory {
+  STANDING
+  SEATED
+  PRONE
+  SUPINE
+  INVERSION
+  BACKBEND
+  FORWARD_BEND
+  TWIST
+  ARM_BALANCE
+  RESTORATIVE
+  PRANAYAMA
+  MEDITATION
+}
+
+enum AsanaDifficulty {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+}
+
+enum AsanaStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum MediaType {
+  IMAGE
+  VIDEO
+  AUDIO
+  DOCUMENT
+}
+
+enum MediaStatus {
+  PENDING_UPLOAD
+  PROCESSING
+  READY
+  FAILED
+  ARCHIVED
+}
+
+model Asana {
+  id                String          @id @default(uuid())
+  tenantId          String?
+  sanskritName      String
+  sanskritNameIast  String?
+  englishName       String
+  commonName        String?
+  description       String?
+  instructions      String?
+  alignmentCues     String?
+  category          AsanaCategory
+  difficulty        AsanaDifficulty @default(BEGINNER)
+  status            AsanaStatus     @default(PUBLISHED)
+  isSharedReference Boolean         @default(false)
+  anatomicalFocus   String[]        @default([])
+  benefits          String[]        @default([])
+  contraindications String[]        @default([])
+  cautions          String?
+  prepPoses         String[]        @default([])
+  followUpPoses     String[]        @default([])
+  variations        String[]        @default([])
+  tags              String[]        @default([])
+  primaryMediaId    String?
+  createdByUserId   String?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  deletedAt         DateTime?
+
+  organization  Organization? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  createdByUser User?         @relation("AsanasCreatedByUser", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  primaryMedia  MediaAsset?   @relation("AsanaPrimaryMedia", fields: [primaryMediaId], references: [id], onDelete: SetNull)
+  mediaList     AsanaMedia[]
+
+  @@index([tenantId, category, difficulty])
+  @@index([tenantId, status])
+  @@index([englishName, sanskritName])
+}
+
+model MediaAsset {
+  id               String      @id @default(uuid())
+  tenantId         String?
+  uploadedByUserId String?
+  title            String
+  description      String?
+  mediaType        MediaType
+  mediaStatus      MediaStatus @default(READY)
+  fileName         String
+  fileSize         Int
+  mimeType         String
+  storageKey       String
+  url              String
+  thumbnailUrl     String?
+  durationSeconds  Int?
+  sha256Hash       String?
+  metadata         Json?
+  isArchived       Boolean     @default(false)
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+  deletedAt        DateTime?
+
+  organization    Organization? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  uploadedByUser  User?         @relation("MediaUploadedByUser", fields: [uploadedByUserId], references: [id], onDelete: SetNull)
+  primaryAsanas   Asana[]       @relation("AsanaPrimaryMedia")
+  asanaMediaItems AsanaMedia[]
+
+  @@index([tenantId, mediaType, isArchived])
+  @@index([tenantId, createdAt])
+}
+
+model AsanaMedia {
+  id           String   @id @default(uuid())
+  tenantId     String?
+  asanaId      String
+  mediaAssetId String
+  sortOrder    Int      @default(0)
+  caption      String?
+  isFeatured   Boolean  @default(false)
+  createdAt    DateTime @default(now())
+
+  asana      Asana      @relation(fields: [asanaId], references: [id], onDelete: Cascade)
+  mediaAsset MediaAsset @relation(fields: [mediaAssetId], references: [id], onDelete: Cascade)
+
+  @@unique([asanaId, mediaAssetId])
+  @@index([asanaId, sortOrder])
 }

@@ -90,6 +90,14 @@ import {
   WebhookEventQuery,
   ReconcilePaymentInput,
   ReconciliationQuery,
+  CreateAsanaInput,
+  UpdateAsanaInput,
+  AsanaListQuery,
+  AssociateAsanaMediaInput,
+  CreateMediaAssetInput,
+  UpdateMediaAssetInput,
+  ReplaceMediaAssetInput,
+  MediaListQuery,
 } from '@yogaos/contracts';
 
 export interface ApiClientOptions {
@@ -846,6 +854,109 @@ export class ApiClient {
     if (query?.limit) params.append('limit', String(query.limit));
     const qs = params.toString() ? `?${params.toString()}` : '';
     return this.request<any[]>(`/billing/gateways/reconciliation${qs}`);
+  }
+
+  // Asanas
+  async getAsanas(query?: AsanaListQuery): Promise<any> {
+    const params = new URLSearchParams();
+    if (query?.search) params.append('search', query.search);
+    if (query?.category) params.append('category', query.category);
+    if (query?.difficulty) params.append('difficulty', query.difficulty);
+    if (query?.status) params.append('status', query.status);
+    if (query?.includeShared !== undefined) params.append('includeShared', String(query.includeShared));
+    if (query?.onlyCustom !== undefined) params.append('onlyCustom', String(query.onlyCustom));
+    if (query?.page) params.append('page', String(query.page));
+    if (query?.limit) params.append('limit', String(query.limit));
+    const qs = params.toString() ? `?${params.toString()}` : '';
+    return this.request<any>(`/asanas${qs}`);
+  }
+
+  async getAsana(id: string): Promise<any> {
+    return this.request<any>(`/asanas/${id}`);
+  }
+
+  async createAsana(data: CreateAsanaInput): Promise<any> {
+    return this.request<any>('/asanas', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateAsana(id: string, data: UpdateAsanaInput): Promise<any> {
+    return this.request<any>(`/asanas/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async archiveAsana(id: string): Promise<any> {
+    return this.request<any>(`/asanas/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async associateAsanaMedia(asanaId: string, data: AssociateAsanaMediaInput): Promise<any> {
+    return this.request<any>(`/asanas/${asanaId}/media`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async removeAsanaMedia(asanaId: string, mediaAssetId: string): Promise<any> {
+    return this.request<any>(`/asanas/${asanaId}/media/${mediaAssetId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async seedClassicalAsanas(): Promise<any> {
+    return this.request<any>('/asanas/seed', {
+      method: 'POST',
+    });
+  }
+
+  // Media Assets
+  async getMediaAssets(query?: MediaListQuery): Promise<any> {
+    const params = new URLSearchParams();
+    if (query?.search) params.append('search', query.search);
+    if (query?.mediaType) params.append('mediaType', query.mediaType);
+    if (query?.mediaStatus) params.append('mediaStatus', query.mediaStatus);
+    if (query?.includeArchived !== undefined) params.append('includeArchived', String(query.includeArchived));
+    if (query?.includeShared !== undefined) params.append('includeShared', String(query.includeShared));
+    if (query?.page) params.append('page', String(query.page));
+    if (query?.limit) params.append('limit', String(query.limit));
+    const qs = params.toString() ? `?${params.toString()}` : '';
+    return this.request<any>(`/media${qs}`);
+  }
+
+  async getMediaAsset(id: string): Promise<any> {
+    return this.request<any>(`/media/${id}`);
+  }
+
+  async createMediaAsset(data: CreateMediaAssetInput): Promise<any> {
+    return this.request<any>('/media', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateMediaAsset(id: string, data: UpdateMediaAssetInput): Promise<any> {
+    return this.request<any>(`/media/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async replaceMediaAsset(id: string, data: ReplaceMediaAssetInput): Promise<any> {
+    return this.request<any>(`/media/${id}/replace`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async archiveMediaAsset(id: string): Promise<any> {
+    return this.request<any>(`/media/${id}`, {
+      method: 'DELETE',
+    });
   }
 }
 

@@ -1,17 +1,17 @@
 # YogaOS — Implementation Status & Milestone Tracker
 
 **Document Reference:** `docs/engineering/IMPLEMENTATION_STATUS.md`  
-**Version:** 1.7.0 (Phase P12 Billing, Payments, Invoices, GST & Refunds Complete)  
-**Current Engineering Phase:** Phase 5 In Progress (P11 & P12 Complete) — Ready for P13 (Asana Library & Sequence Builder)  
+**Version:** 1.8.0 (Phase P14 Asana Library & Media Management Complete)  
+**Current Engineering Phase:** Phase 6 In Progress (P14 Complete) — Ready for P15 (Sequence Builder)  
 
 ---
 
 ## 1. Executive Implementation Dashboard
 
 ```
-Overall Progress: [██████████░░░░░░░░░░] 60.0% Complete (Phase 5 Billing & Tax Engine Built)
-Phases Completed: 4 / 8
-Quality Gates Passed: 4 / 6 (Gate 1 Foundation, Gate 2 Multi-Tenant, Gate 3 Operations, Privacy & Scheduling)
+Overall Progress: [██████████████░░░░░░] 70.0% Complete (Phase 6 Asana & Media Engine Built)
+Phases Completed: 5 / 8
+Quality Gates Passed: 5 / 6 (Gate 1 Foundation, Gate 2 Multi-Tenant, Gate 3 Operations, Gate 4 Billing & Tax Engine, Gate 5 Asana Library Foundation)
 ```
 
 | Phase | Phase Name | Planned Prompts | Status | Quality Gate Status |
@@ -20,8 +20,8 @@ Quality Gates Passed: 4 / 6 (Gate 1 Foundation, Gate 2 Multi-Tenant, Gate 3 Oper
 | **Phase 2** | Global Identity, Auth & Multi-Tenancy | Prompts 4–5 | **COMPLETED (P07)** | **Gate 2: PASSED** |
 | **Phase 3** | Studio Core: Branches, Staff & Student Privacy | Prompts 6–7 | **COMPLETED (P08)** | **Gate 3: PASSED** |
 | **Phase 4** | Classes, Schedules, Bookings & Attendance | Prompts 8–10 | **COMPLETED (P09, P10)**| **Gate 3: PASSED** |
-| **Phase 5** | Memberships, Passes, Billing & Configurable GST | Prompts 11–13 | **IN PROGRESS (P11 & P12 Done)** | Gate 4: In Progress |
-| **Phase 6** | Asana Library & Versioned Sequence Builder | Prompts 14–15 | PENDING | Gate 4: Pending |
+| **Phase 5** | Memberships, Passes, Billing & Configurable GST | Prompts 11–13 | **COMPLETED (P11, P12, P13)** | **Gate 4: PASSED** |
+| **Phase 6** | Asana Library & Versioned Sequence Builder | Prompts 14–15 | **IN PROGRESS (P14 Done)** | Gate 5: In Progress |
 | **Phase 7** | Offline-First Automated Class Conductor | Prompts 16–18 | PENDING | Gate 5: Pending |
 | **Phase 8** | Operational Dashboard, E2E Verification & Release | Prompts 19–20 | PENDING | Gate 6: Pending |
 
@@ -111,8 +111,24 @@ Quality Gates Passed: 4 / 6 (Gate 1 Foundation, Gate 2 Multi-Tenant, Gate 3 Oper
   - [x] Background worker daemon integration for recurring renewal checks and queued reminder dispatching.
   - [x] Full UI workflows: Billing operations, daily collections reconciliation, renewals, reminders, gateway configuration, and discrepancies dashboard (`/billing`), tax invoices directory (`/billing/invoices`), printable GST tax invoice view (`/billing/invoices/[id]`), and student detail billing history tab.
   - [x] Automated tests verified: 152 total (126 real PostgreSQL database integration tests + 26 unit tests).
-* **Gate 5: Conductor Offline Resilience** — Status: **PENDING (Phase 7)**
-* **Gate 6: Production Release Readiness** — Status: **PENDING (Phase 8)**
+* **Gate 5: Asana Library & Media Management** — Status: **PASSED (Certified in P14)**
+  - [x] Tenant-aware Yoga Asana catalog supporting Sanskrit names (Devanagari script & IAST transliteration), English names, common/vernacular names, descriptions, and step-by-step instructions.
+  - [x] Structured taxonomy: categories (`STANDING`, `SEATED`, `PRONE`, `SUPINE`, `INVERSION`, `BACKBEND`, `FORWARD_BEND`, `TWIST`, `ARM_BALANCE`, `RESTORATIVE`, `PRANAYAMA`, `MEDITATION`), difficulty levels (`BEGINNER`, `INTERMEDIATE`, `ADVANCED`), and lifecycle states (`DRAFT`, `PUBLISHED`, `ARCHIVED`).
+  - [x] Comprehensive anatomical and safety metadata: anatomical focus array, therapeutic benefits, contraindications, cautions & disclaimers, prep poses, follow-up poses, variations, and searchable tags.
+  - [x] YogaOS shared reference catalog (`isSharedReference: true`, `tenantId: null`) pre-seeded with 10 foundational classical postures (Adho Mukha Svanasana, Trikonasana, Virabhadrasana I & II, Vrikshasana, Paschimottanasana, Bhujangasana, Savasana, Setu Bandhasana, Balasana) accessible to all studios with idempotency protection.
+  - [x] Studio custom posture creation and editing with strict multi-tenant isolation (Tenant B cannot read, modify, or archive Tenant A custom poses).
+  - [x] Immutability protection for shared reference catalog against tenant tampering or archival.
+  - [x] Media asset registry supporting instructional videos, audio guidance files, alignment photographs, and reference PDF documents.
+  - [x] Strict MIME type enforcement and file size ceilings (10MB image, 50MB audio, 150MB video, 20MB document) with duration seconds, SHA-256 integrity hash, and storage key tracking.
+  - [x] Non-destructive file replacement and soft-archival without breaking historical posture references.
+  - [x] Multi-media posture binding (`AsanaMedia`) supporting ordered attachments, featured media flags, and teacher captions.
+  - [x] Cross-tenant media protection: tenants are strictly forbidden from associating another studio's media assets with their postures.
+  - [x] Responsive web interface:
+    - `/asana-library`: Posture catalog with dual Sanskrit/English display, category/difficulty/scope filters, text search, and custom posture modal.
+    - `/asana-library/[id]`: Detailed posture view with alignment cues, step-by-step instructions, contraindications disclaimer, and instructional media players (accessible HTML5 video/audio controls with NO autoplay).
+    - `/media-library`: Media directory with filterable grid, media viewer/player modal, and safe registration workflow.
+  - [x] Automated tests verified: 178 total (139 real PostgreSQL database integration tests + 39 unit tests).
+* **Gate 6: Conductor Offline Resilience & Release Readiness** — Status: **PENDING (Phase 7 & 8)**
 
 ---
 *End of Implementation Status & Milestone Tracker.*
