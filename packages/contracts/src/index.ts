@@ -2,3 +2,6 @@ export * from './common.js';
 export * from './health.js';
 export * from './auth.js';
 export * from './organization.js';
+export * from './studio.js';
+export * from './student.js';
+export * from './lead.js';

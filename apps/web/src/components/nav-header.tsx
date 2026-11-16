@@ -27,6 +27,17 @@ export function NavHeader() {
               <Link href="/dashboard" className="text-stone-700 hover:text-emerald-700">
                 Dashboard
               </Link>
+              <Link href="/students" className="text-stone-700 hover:text-emerald-700">
+                Students
+              </Link>
+              <Link href="/leads" className="text-stone-700 hover:text-emerald-700">
+                Leads
+              </Link>
+              {(activeRole === 'OWNER' || activeRole === 'MANAGER') && (
+                <Link href="/settings" className="text-stone-700 hover:text-emerald-700">
+                  Studio Settings
+                </Link>
+              )}
             </nav>
           )}
         </div>

@@ -27,6 +27,30 @@ enum InvitationStatus {
   EXPIRED
 }
 
+enum StudentStatus {
+  LEAD
+  TRIAL
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  TRIAL_BOOKED
+  CONVERTED
+  LOST
+}
+
+enum LeadSource {
+  WALK_IN
+  WEBSITE
+  INSTAGRAM
+  REFERRAL
+  OTHER
+}
+
 model User {
   id               String                 @id @default(uuid())
   email            String                 @unique
@@ -45,6 +69,8 @@ model User {
   memberships      OrganizationMember[]
   sentInvitations  Invitation[]           @relation("InvitedByUser")
   auditLogs        AuditLog[]
+  healthDisclaimersUpdated StudentHealthDisclaimer[]
+  studentActivities StudentActivity[]
 
   @@index([email])
   @@index([phone])
@@ -104,6 +130,9 @@ model Organization {
   timezone         String               @default("Asia/Kolkata")
   isGstRegistered  Boolean              @default(false)
   gstin            String?
+  panNumber        String?
+  billingAddress   Json?
+  settings         Json?
   createdAt        DateTime             @default(now())
   updatedAt        DateTime             @updatedAt
   deletedAt        DateTime?
@@ -111,6 +140,10 @@ model Organization {
   members          OrganizationMember[]
   invitations      Invitation[]
   auditLogs        AuditLog[]
+  branches         Branch[]
+  rooms            Room[]
+  students         Student[]
+  leads            Lead[]
 
   @@index([slug])
 }
@@ -177,4 +210,163 @@ model SystemHealthCheck {
   id        String   @id @default(uuid())
   checkedAt DateTime @default(now())
   status    String   @default("OK")
+}
+
+model Branch {
+  id              String        @id @default(uuid())
+  tenantId        String
+  name            String
+  slug            String
+  streetAddress   String
+  city            String
+  state           String
+  stateCode       String        // Indian 2-digit GST state code, e.g. '29'
+  postalCode      String
+  phone           String
+  email           String
+  operatingHours  Json?
+  isActive        Boolean       @default(true)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  deletedAt       DateTime?
+
+  organization    Organization  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  rooms           Room[]
+  students        Student[]
+  leads           Lead[]
+
+  @@unique([tenantId, slug])
+  @@index([tenantId, stateCode])
+  @@index([tenantId, isActive])
+}
+
+model Room {
+  id              String        @id @default(uuid())
+  tenantId        String
+  branchId        String
+  name            String
+  description     String?
+  maxMatCapacity  Int
+  isActive        Boolean       @default(true)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  organization    Organization  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branch          Branch        @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, branchId])
+  @@index([tenantId, isActive])
+}
+
+model Student {
+  id                      String                   @id @default(uuid())
+  tenantId                String
+  homeBranchId            String
+  fullName                String
+  mobilePhone             String
+  email                   String?
+  dateOfBirth             DateTime?
+  gender                  String?
+  emergencyContactName    String
+  emergencyContactPhone   String
+  emergencyContactRelation String
+  status                  StudentStatus            @default(ACTIVE)
+  billingAddress          Json?
+  billingStateCode        String?
+  hasHealthAlert          Boolean                  @default(false)
+  createdAt               DateTime                 @default(now())
+  updatedAt               DateTime                 @updatedAt
+  deletedAt               DateTime?
+
+  organization            Organization             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  homeBranch              Branch                   @relation(fields: [homeBranchId], references: [id], onDelete: Restrict)
+  healthDisclaimer        StudentHealthDisclaimer?
+  consents                StudentConsent[]
+  activities              StudentActivity[]
+  convertedFromLead       Lead?                    @relation("ConvertedLeadStudent")
+
+  @@index([tenantId, mobilePhone])
+  @@index([tenantId, email])
+  @@index([tenantId, fullName])
+  @@index([tenantId, status])
+  @@index([tenantId, homeBranchId])
+}
+
+model StudentHealthDisclaimer {
+  id                     String    @id @default(uuid())
+  tenantId               String
+  studentId              String    @unique
+  injurySummary          String?   // Short non-clinical summary e.g. "Lower Back L4/L5, Right Wrist"
+  healthNotesCiphertext  String    // AES-256-GCM encrypted detailed narrative
+  healthNotesIv          String    // 12-byte IV hex string
+  healthNotesTag         String    // 16-byte GCM authentication tag hex string
+  hasPregnancyAlert      Boolean   @default(false)
+  consentSigned          Boolean   @default(true)
+  consentTimestamp       DateTime  @default(now())
+  consentIpAddress       String?
+  updatedByUserId        String?
+  updatedAt              DateTime  @updatedAt
+
+  student                Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  updatedByUser          User?     @relation(fields: [updatedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, studentId])
+}
+
+model StudentConsent {
+  id              String        @id @default(uuid())
+  tenantId        String
+  studentId       String
+  consentType     String        // LIABILITY_WAIVER, GENERAL_TERMS, PHOTO_VIDEO_RELEASE
+  version         String        @default("1.0")
+  isAgreed        Boolean       @default(true)
+  agreedAt        DateTime      @default(now())
+  ipAddress       String?
+  userAgent       String?
+
+  student         Student       @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, studentId])
+}
+
+model StudentActivity {
+  id                  String        @id @default(uuid())
+  tenantId            String
+  studentId           String
+  activityType        String        // REGISTERED, PROFILE_UPDATED, HEALTH_DISCLAIMER_UPDATED, CONSENT_SIGNED, LEAD_CONVERTED, STAFF_NOTE
+  title               String
+  description         String?
+  performedByUserId   String?
+  metadata            Json?
+  createdAt           DateTime      @default(now())
+
+  student             Student       @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  performedByUser     User?         @relation(fields: [performedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, studentId, createdAt])
+}
+
+model Lead {
+  id                  String        @id @default(uuid())
+  tenantId            String
+  branchId            String?
+  fullName            String
+  phone               String
+  email               String?
+  source              LeadSource    @default(WALK_IN)
+  interestedProgram   String?
+  status              LeadStatus    @default(NEW)
+  followUpDate        DateTime?
+  notes               String?
+  convertedStudentId  String?       @unique
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+
+  organization        Organization  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branch              Branch?       @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  convertedStudent    Student?      @relation("ConvertedLeadStudent", fields: [convertedStudentId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, status])
+  @@index([tenantId, phone])
+  @@index([tenantId, followUpDate])
 }

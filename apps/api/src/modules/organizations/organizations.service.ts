@@ -113,7 +113,7 @@ export class OrganizationsService {
     }));
   }
 
-  async getOrganizationById(tenantId: string): Promise<OrganizationDetails> {
+  async getOrganizationById(tenantId: string): Promise<any> {
     const org = await prisma.organization.findUnique({
       where: { id: tenantId },
     });
@@ -131,7 +131,50 @@ export class OrganizationsService {
       timezone: org.timezone,
       isGstRegistered: org.isGstRegistered,
       gstin: org.gstin,
+      panNumber: org.panNumber,
+      billingAddress: org.billingAddress,
+      settings: org.settings,
       createdAt: org.createdAt.toISOString(),
     };
+  }
+
+  async updateOrganizationSettings(
+    tenantId: string,
+    data: any,
+    userId: string
+  ): Promise<any> {
+    const org = await prisma.organization.findUnique({
+      where: { id: tenantId },
+    });
+
+    if (!org || org.deletedAt) {
+      throw new NotFoundException('Organization not found');
+    }
+
+    const updated = await prisma.organization.update({
+      where: { id: tenantId },
+      data: {
+        name: data.name ?? undefined,
+        legalEntityName: data.legalEntityName !== undefined ? data.legalEntityName : undefined,
+        currency: data.currency ?? undefined,
+        timezone: data.timezone ?? undefined,
+        isGstRegistered: data.isGstRegistered !== undefined ? data.isGstRegistered : undefined,
+        gstin: data.gstin !== undefined ? data.gstin : undefined,
+        panNumber: data.panNumber !== undefined ? data.panNumber : undefined,
+        billingAddress: data.billingAddress !== undefined ? data.billingAddress : undefined,
+        settings: data.settings !== undefined ? data.settings : undefined,
+      },
+    });
+
+    await this.audit.log({
+      tenantId,
+      userId,
+      action: 'ORG_SETTINGS_UPDATED',
+      resourceType: 'Organization',
+      resourceId: tenantId,
+      details: data,
+    });
+
+    return this.getOrganizationById(tenantId);
   }
 }
