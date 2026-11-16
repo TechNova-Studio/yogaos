@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { useAuth } from '../../../context/auth-context';
 import { getApiClient } from '@yogaos/api-client';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, Button, Badge } from '@yogaos/ui';
-import type { StudentDetails, StudentActivityDetails } from '@yogaos/contracts';
+import type { StudentDetails, StudentActivityDetails, BookingDetails } from '@yogaos/contracts';
 
 export default function StudentDetailPage() {
   const params = useParams();
@@ -16,6 +16,7 @@ export default function StudentDetailPage() {
 
   const [student, setStudent] = useState<StudentDetails | null>(null);
   const [timeline, setTimeline] = useState<StudentActivityDetails[]>([]);
+  const [bookings, setBookings] = useState<BookingDetails[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -48,13 +49,15 @@ export default function StudentDetailPage() {
     try {
       setLoading(true);
       setError(null);
-      const [studentData, timelineData] = await Promise.all([
+      const [studentData, timelineData, bookingsData] = await Promise.all([
         client.getStudent(studentId),
         client.getStudentTimeline(studentId),
+        client.getStudentBookings(studentId).catch(() => []),
       ]);
 
       setStudent(studentData);
       setTimeline(timelineData);
+      setBookings(bookingsData);
 
       setEditPhone(studentData.mobilePhone || '');
       setEditEmail(studentData.email || '');
@@ -428,6 +431,72 @@ export default function StudentDetailPage() {
               ) : (
                 <div className="py-4 text-center text-xs text-stone-500">
                   No health or injury limitations recorded for this student.
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Class Bookings & Attendance History */}
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle>Class Bookings & Attendance History</CardTitle>
+                <CardDescription>Reservations, attendances, no-shows, and cancellations.</CardDescription>
+              </div>
+              <span className="text-xs text-stone-500 font-semibold">{bookings.length} records</span>
+            </CardHeader>
+            <CardContent>
+              {bookings.length === 0 ? (
+                <div className="py-6 text-center text-xs text-stone-500">
+                  No class bookings on record for this student.
+                </div>
+              ) : (
+                <div className="divide-y divide-stone-100">
+                  {bookings.map((b) => (
+                    <div key={b.id} className="py-3 flex items-center justify-between text-xs">
+                      <div>
+                        <div className="font-semibold text-stone-900">{b.className}</div>
+                        <div className="text-stone-500 text-[11px]">
+                          {b.sessionStart
+                            ? new Date(b.sessionStart).toLocaleString([], {
+                                weekday: 'short',
+                                month: 'short',
+                                day: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })
+                            : b.sessionDate}{' '}
+                          • {b.roomName} • {b.instructorName}
+                        </div>
+                        {b.checkedInAt && (
+                          <div className="text-emerald-700 text-[10px] mt-0.5">
+                            Checked in: {new Date(b.checkedInAt).toLocaleTimeString()}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <Badge
+                          variant={
+                            b.status === 'ATTENDED'
+                              ? 'success'
+                              : b.status === 'CANCELLED'
+                              ? 'outline'
+                              : b.status === 'NO_SHOW' || b.status === 'LATE_CANCEL'
+                              ? 'destructive'
+                              : 'default'
+                          }
+                        >
+                          {b.status}
+                        </Badge>
+                        <Link
+                          href={`/bookings/roster/${b.sessionInstanceId}`}
+                          className="text-stone-400 hover:text-emerald-700 font-medium"
+                        >
+                          Roster →
+                        </Link>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
             </CardContent>

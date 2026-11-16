@@ -500,18 +500,26 @@ export default function ScheduleCalendarPage() {
 
                           {canManage && !isCancelled && (
                             <div className="mt-2.5 flex items-center justify-between border-t border-stone-100 pt-1.5">
-                              <button
-                                onClick={() => openRescheduleModal(session)}
-                                className="text-[11px] font-medium text-emerald-700 hover:underline"
+                              <Link
+                                href={`/bookings/roster/${session.id}`}
+                                className="text-[11px] font-bold text-emerald-700 hover:underline"
                               >
-                                Reschedule
-                              </button>
-                              <button
-                                onClick={() => setCancelModalSession(session)}
-                                className="text-[11px] font-medium text-stone-400 hover:text-red-700"
-                              >
-                                Cancel
-                              </button>
+                                Roster & Check-In
+                              </Link>
+                              <div className="flex items-center gap-2">
+                                <button
+                                  onClick={() => openRescheduleModal(session)}
+                                  className="text-[11px] font-medium text-stone-500 hover:text-stone-800"
+                                >
+                                  Reschedule
+                                </button>
+                                <button
+                                  onClick={() => setCancelModalSession(session)}
+                                  className="text-[11px] font-medium text-stone-400 hover:text-red-700"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
                             </div>
                           )}
                         </div>

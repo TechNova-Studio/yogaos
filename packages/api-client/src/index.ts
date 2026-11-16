@@ -43,6 +43,15 @@ import {
   CancelSessionInstanceRequest,
   SessionCalendarQuery,
   InstructorSummary,
+  CreateBookingRequest,
+  CancelBookingRequest,
+  BookingDetails,
+  BookingListQuery,
+  JoinWaitlistRequest,
+  WaitlistEntryDetails,
+  MarkAttendanceRequest,
+  AttendanceRecordDetails,
+  SessionRoster,
 } from '@yogaos/contracts';
 
 export interface ApiClientOptions {
@@ -443,6 +452,72 @@ export class ApiClient {
   // --------------------------------------------------------------------------
   async getInstructors(): Promise<InstructorSummary[]> {
     return this.request<InstructorSummary[]>('/classes/sessions/instructors');
+  }
+
+  // --------------------------------------------------------------------------
+  // P10: Bookings, Waitlists & Attendance
+  // --------------------------------------------------------------------------
+  async getBookings(query?: BookingListQuery): Promise<{ bookings: BookingDetails[]; total: number; page: number; limit: number }> {
+    const params = new URLSearchParams();
+    if (query?.sessionInstanceId) params.set('sessionInstanceId', query.sessionInstanceId);
+    if (query?.studentId) params.set('studentId', query.studentId);
+    if (query?.status) params.set('status', query.status);
+    if (query?.page) params.set('page', String(query.page));
+    if (query?.limit) params.set('limit', String(query.limit));
+    const qs = params.toString() ? `?${params.toString()}` : '';
+    return this.request(`/bookings${qs}`);
+  }
+
+  async getBooking(id: string): Promise<BookingDetails> {
+    return this.request<BookingDetails>(`/bookings/${id}`);
+  }
+
+  async createBooking(data: CreateBookingRequest): Promise<BookingDetails> {
+    return this.request<BookingDetails>('/bookings', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async cancelBooking(id: string, data?: CancelBookingRequest): Promise<BookingDetails> {
+    return this.request<BookingDetails>(`/bookings/${id}/cancel`, {
+      method: 'POST',
+      body: JSON.stringify(data || {}),
+    });
+  }
+
+  async joinWaitlist(data: JoinWaitlistRequest): Promise<WaitlistEntryDetails> {
+    return this.request<WaitlistEntryDetails>('/bookings/waitlist', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async cancelWaitlist(id: string): Promise<void> {
+    return this.request<void>(`/bookings/waitlist/${id}/cancel`, {
+      method: 'POST',
+    });
+  }
+
+  async promoteWaitlistEntry(id: string): Promise<BookingDetails> {
+    return this.request<BookingDetails>(`/bookings/waitlist/${id}/promote`, {
+      method: 'POST',
+    });
+  }
+
+  async getSessionRoster(sessionId: string): Promise<SessionRoster> {
+    return this.request<SessionRoster>(`/bookings/roster/${sessionId}`);
+  }
+
+  async markAttendance(bookingId: string, data: MarkAttendanceRequest): Promise<AttendanceRecordDetails> {
+    return this.request<AttendanceRecordDetails>(`/bookings/${bookingId}/attendance`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getStudentBookings(studentId: string): Promise<BookingDetails[]> {
+    return this.request<BookingDetails[]>(`/bookings/student/${studentId}`);
   }
 }
 

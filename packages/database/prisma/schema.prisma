@@ -101,6 +101,7 @@ model User {
   instructorBatches ClassBatch[]            @relation("InstructorBatches")
   instructorSessions ClassSessionInstance[] @relation("InstructorSessions")
   instructorProfiles InstructorProfile[]
+  attendanceMarked AttendanceRecord[]       @relation("AttendanceMarkedByUser")
 
   @@index([email])
   @@index([phone])
@@ -178,6 +179,9 @@ model Organization {
   batches          ClassBatch[]
   sessions         ClassSessionInstance[]
   instructorProfiles InstructorProfile[]
+  bookings         Booking[]
+  waitlistEntries  WaitlistEntry[]
+  attendanceRecords AttendanceRecord[]
 
   @@index([slug])
 }
@@ -322,6 +326,8 @@ model Student {
   consents                StudentConsent[]
   activities              StudentActivity[]
   convertedFromLead       Lead?                    @relation("ConvertedLeadStudent")
+  bookings                Booking[]
+  waitlistEntries         WaitlistEntry[]
 
   @@index([tenantId, mobilePhone])
   @@index([tenantId, email])
@@ -512,6 +518,8 @@ model ClassSessionInstance {
   branch               Branch        @relation(fields: [branchId], references: [id], onDelete: Restrict)
   room                 Room          @relation(fields: [roomId], references: [id], onDelete: Restrict)
   instructor           User          @relation("InstructorSessions", fields: [instructorId], references: [id], onDelete: Restrict)
+  bookings             Booking[]
+  waitlistEntries      WaitlistEntry[]
 
   @@index([tenantId, sessionDate])
   @@index([tenantId, startTimestamp])
@@ -519,4 +527,104 @@ model ClassSessionInstance {
   @@index([roomId, startTimestamp, endTimestamp])
   @@index([instructorId, startTimestamp, endTimestamp])
   @@index([batchId])
+}
+
+// ----------------------------------------------------------------------------
+// P10: Bookings, Waitlists & Attendance
+// ----------------------------------------------------------------------------
+
+enum BookingStatus {
+  BOOKED
+  ATTENDED
+  LATE_CANCEL
+  NO_SHOW
+  CANCELLED
+}
+
+enum BookingSource {
+  FRONT_DESK
+  ONLINE
+  ADMIN_OVERRIDE
+}
+
+enum WaitlistStatus {
+  WAITING
+  PROMOTED
+  EXPIRED
+  CANCELLED
+}
+
+enum CheckInMethod {
+  FRONT_DESK_ROSTER
+  KIOSK
+  MANUAL_OVERRIDE
+}
+
+model Booking {
+  id                    String        @id @default(uuid())
+  tenantId              String
+  sessionInstanceId     String
+  studentId             String
+  status                BookingStatus @default(BOOKED)
+  source                BookingSource @default(FRONT_DESK)
+  bookedAt              DateTime      @default(now())
+  cancelledAt           DateTime?
+  cancellationReason    String?
+  notes                 String?
+  isPassCreditDeducted  Boolean       @default(false)
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+
+  organization          Organization         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  session               ClassSessionInstance @relation(fields: [sessionInstanceId], references: [id], onDelete: Cascade)
+  student               Student              @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  attendance            AttendanceRecord?
+  promotedFromWaitlist  WaitlistEntry?       @relation("PromotedBooking")
+
+  @@unique([tenantId, sessionInstanceId, studentId])
+  @@index([tenantId, sessionInstanceId, status])
+  @@index([tenantId, studentId])
+  @@index([sessionInstanceId, status])
+}
+
+model WaitlistEntry {
+  id                    String         @id @default(uuid())
+  tenantId              String
+  sessionInstanceId     String
+  studentId             String
+  priorityRank          Int
+  status                WaitlistStatus @default(WAITING)
+  promotedToBookingId   String?        @unique
+  notes                 String?
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+
+  organization          Organization         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  session               ClassSessionInstance @relation(fields: [sessionInstanceId], references: [id], onDelete: Cascade)
+  student               Student              @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  promotedToBooking     Booking?             @relation("PromotedBooking", fields: [promotedToBookingId], references: [id], onDelete: SetNull)
+
+  @@unique([tenantId, sessionInstanceId, priorityRank])
+  @@unique([tenantId, sessionInstanceId, studentId])
+  @@index([tenantId, sessionInstanceId, status, priorityRank])
+  @@index([tenantId, studentId])
+}
+
+model AttendanceRecord {
+  id                    String        @id @default(uuid())
+  tenantId              String
+  bookingId             String        @unique
+  checkedInAt           DateTime      @default(now())
+  checkedInByUserId     String
+  checkInMethod         CheckInMethod @default(FRONT_DESK_ROSTER)
+  notes                 String?
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+
+  organization          Organization  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  booking               Booking       @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  checkedInByUser       User          @relation("AttendanceMarkedByUser", fields: [checkedInByUserId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, checkedInAt])
+  @@index([checkedInByUserId])
 }

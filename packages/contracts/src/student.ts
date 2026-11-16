@@ -148,4 +148,4 @@ export const StudentListQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(20),
 });
 
-export type StudentListQuery = z.infer<typeof StudentListQuerySchema>;
+export type StudentListQuery = z.input<typeof StudentListQuerySchema>;
