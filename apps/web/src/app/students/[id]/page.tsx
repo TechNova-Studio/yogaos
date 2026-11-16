@@ -6,7 +6,14 @@ import Link from 'next/link';
 import { useAuth } from '../../../context/auth-context';
 import { getApiClient } from '@yogaos/api-client';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, Button, Badge } from '@yogaos/ui';
-import type { StudentDetails, StudentActivityDetails, BookingDetails } from '@yogaos/contracts';
+import type {
+  StudentDetails,
+  StudentActivityDetails,
+  BookingDetails,
+  StudentMembershipDetails,
+  MembershipPlanDetails,
+  CreditLedgerEntryDetails,
+} from '@yogaos/contracts';
 
 export default function StudentDetailPage() {
   const params = useParams();
@@ -17,9 +24,29 @@ export default function StudentDetailPage() {
   const [student, setStudent] = useState<StudentDetails | null>(null);
   const [timeline, setTimeline] = useState<StudentActivityDetails[]>([]);
   const [bookings, setBookings] = useState<BookingDetails[]>([]);
+  const [memberships, setMemberships] = useState<StudentMembershipDetails[]>([]);
+  const [availablePlans, setAvailablePlans] = useState<MembershipPlanDetails[]>([]);
+  const [ledgerEntries, setLedgerEntries] = useState<CreditLedgerEntryDetails[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+
+  // Membership Modals state
+  const [showAssignModal, setShowAssignModal] = useState(false);
+  const [selectedPlanId, setSelectedPlanId] = useState('');
+  const [assignStartDate, setAssignStartDate] = useState('');
+  const [assignNotes, setAssignNotes] = useState('');
+
+  const [freezeModalMembership, setFreezeModalMembership] = useState<StudentMembershipDetails | null>(null);
+  const [freezeReason, setFreezeReason] = useState('Medical rest / travel');
+
+  const [showLedgerModal, setShowLedgerModal] = useState(false);
+  const [ledgerMembership, setLedgerMembership] = useState<StudentMembershipDetails | null>(null);
+
+  const [showAdjustModal, setShowAdjustModal] = useState(false);
+  const [adjustMembership, setAdjustMembership] = useState<StudentMembershipDetails | null>(null);
+  const [adjustDelta, setAdjustDelta] = useState<number>(1);
+  const [adjustReason, setAdjustReason] = useState('Staff courtesy balance adjustment');
 
   // Edit contact info state
   const [isEditingContact, setIsEditingContact] = useState(false);
@@ -49,15 +76,22 @@ export default function StudentDetailPage() {
     try {
       setLoading(true);
       setError(null);
-      const [studentData, timelineData, bookingsData] = await Promise.all([
+      const [studentData, timelineData, bookingsData, membershipsData, plansData] = await Promise.all([
         client.getStudent(studentId),
         client.getStudentTimeline(studentId),
         client.getStudentBookings(studentId).catch(() => []),
+        client.getStudentMemberships({ studentId }).catch(() => []),
+        client.getMembershipPlans({ isActive: true }).catch(() => []),
       ]);
 
       setStudent(studentData);
       setTimeline(timelineData);
       setBookings(bookingsData);
+      setMemberships(membershipsData);
+      setAvailablePlans(plansData);
+      if (plansData.length > 0 && !selectedPlanId) {
+        setSelectedPlanId(plansData[0].id);
+      }
 
       setEditPhone(studentData.mobilePhone || '');
       setEditEmail(studentData.email || '');
@@ -134,6 +168,84 @@ export default function StudentDetailPage() {
       loadData();
     } catch (err: any) {
       setError(err.message || 'Failed to add staff note');
+    }
+  };
+
+  const handleAssignMembership = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedPlanId) return;
+    try {
+      setError(null);
+      await client.assignStudentMembership({
+        studentId,
+        membershipPlanId: selectedPlanId,
+        startDate: assignStartDate || undefined,
+        notes: assignNotes || null,
+      });
+      setMessage('Membership / Class Pass assigned successfully');
+      setShowAssignModal(false);
+      setAssignNotes('');
+      loadData();
+    } catch (err: any) {
+      setError(err.message || 'Failed to assign membership');
+    }
+  };
+
+  const handleFreezeMembership = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!freezeModalMembership) return;
+    try {
+      setError(null);
+      await client.freezeStudentMembership(freezeModalMembership.id, {
+        freezeReason,
+      });
+      setMessage(`Membership "${freezeModalMembership.planNameSnapshot}" is now FROZEN`);
+      setFreezeModalMembership(null);
+      loadData();
+    } catch (err: any) {
+      setError(err.message || 'Failed to freeze membership');
+    }
+  };
+
+  const handleUnfreezeMembership = async (membershipId: string) => {
+    try {
+      setError(null);
+      const updated = await client.unfreezeStudentMembership(membershipId);
+      setMessage(`Membership resumed! Expiration extended to ${new Date(updated.expiryDate).toLocaleDateString()}`);
+      loadData();
+    } catch (err: any) {
+      setError(err.message || 'Failed to unfreeze membership');
+    }
+  };
+
+  const openLedgerModal = async (membership: StudentMembershipDetails) => {
+    setLedgerMembership(membership);
+    setShowLedgerModal(true);
+    try {
+      const entries = await client.getCreditLedger({
+        studentMembershipId: membership.id,
+        limit: 50,
+      });
+      setLedgerEntries(entries);
+    } catch (err: any) {
+      setError(err.message || 'Failed to load credit ledger');
+    }
+  };
+
+  const handleAdjustCredits = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!adjustMembership) return;
+    try {
+      setError(null);
+      await client.adjustCreditsManually(adjustMembership.id, {
+        creditsDelta: adjustDelta,
+        reason: adjustReason,
+      });
+      setMessage(`Adjusted ${adjustDelta > 0 ? '+' : ''}${adjustDelta} credits`);
+      setShowAdjustModal(false);
+      loadData();
+    } catch (err: any) {
+      setError(err.message || 'Failed to adjust credits');
     }
   };
 
@@ -436,6 +548,157 @@ export default function StudentDetailPage() {
             </CardContent>
           </Card>
 
+          {/* Memberships & Class Passes Card */}
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle>Memberships & Class Passes</CardTitle>
+                <CardDescription>Active subscriptions, class packages, and credit balances.</CardDescription>
+              </div>
+              <Button size="sm" onClick={() => setShowAssignModal(true)}>
+                + Assign Plan / Pass
+              </Button>
+            </CardHeader>
+            <CardContent>
+              {memberships.length === 0 ? (
+                <div className="py-6 text-center text-xs text-stone-500">
+                  No memberships or class passes recorded for this student.
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {memberships.map((m) => {
+                    const isFrozen = m.status === 'FROZEN';
+                    const isExpired = new Date() > new Date(m.expiryDate) || m.status === 'EXPIRED';
+                    const isUnlimited = m.planTypeSnapshot === 'TIME_UNLIMITED';
+
+                    return (
+                      <div
+                        key={m.id}
+                        className={`rounded-lg border p-4 text-xs transition-all ${
+                          isFrozen
+                            ? 'border-cyan-300 bg-cyan-50/50'
+                            : m.status === 'CANCELLED'
+                            ? 'border-stone-200 bg-stone-50 opacity-60'
+                            : isExpired
+                            ? 'border-stone-200 bg-stone-50'
+                            : 'border-emerald-200 bg-emerald-50/30'
+                        }`}
+                      >
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-stone-900 text-sm">{m.planNameSnapshot}</span>
+                              <Badge
+                                variant={
+                                  m.status === 'ACTIVE'
+                                    ? 'success'
+                                    : isFrozen
+                                    ? 'outline'
+                                    : m.status === 'CANCELLED'
+                                    ? 'destructive'
+                                    : 'default'
+                                }
+                              >
+                                {isFrozen ? '❄️ FROZEN' : m.status}
+                              </Badge>
+                              <Badge variant="outline">
+                                {isUnlimited
+                                  ? 'Unlimited'
+                                  : m.planTypeSnapshot === 'SINGLE_DROP_IN'
+                                  ? 'Drop-In'
+                                  : 'Class Pack'}
+                              </Badge>
+                            </div>
+                            <div className="text-stone-500 text-[11px] mt-1">
+                              Valid: {new Date(m.startDate).toLocaleDateString()} →{' '}
+                              <span className="font-semibold text-stone-800">
+                                {new Date(m.expiryDate).toLocaleDateString()}
+                              </span>
+                              {m.freezesUsed > 0 && ` • Freezes used: ${m.freezesUsed}`}
+                              {m.totalFrozenDays > 0 && ` (${m.totalFrozenDays} days total)`}
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-3">
+                            {!isUnlimited && (
+                              <div className="text-right">
+                                <span className="text-[11px] text-stone-500 block">Remaining Credits</span>
+                                <span className="text-base font-bold text-emerald-800">
+                                  {m.remainingCredits ?? 0}
+                                  <span className="text-xs font-normal text-stone-500"> / {m.totalCredits ?? 0}</span>
+                                </span>
+                              </div>
+                            )}
+
+                            <div className="flex items-center gap-1.5">
+                              {m.status === 'ACTIVE' && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => {
+                                    setFreezeModalMembership(m);
+                                    setFreezeReason('Medical rest / travel');
+                                  }}
+                                >
+                                  ❄️ Freeze
+                                </Button>
+                              )}
+                              {isFrozen && (
+                                <Button
+                                  variant="primary"
+                                  size="sm"
+                                  onClick={() => handleUnfreezeMembership(m.id)}
+                                >
+                                  ▶️ Resume
+                                </Button>
+                              )}
+                              {!isUnlimited && (
+                                <>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => openLedgerModal(m)}
+                                  >
+                                    Ledger
+                                  </Button>
+                                  {(activeRole === 'OWNER' || activeRole === 'MANAGER') && (
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => {
+                                        setAdjustMembership(m);
+                                        setAdjustDelta(1);
+                                        setAdjustReason('Staff courtesy balance adjustment');
+                                        setShowAdjustModal(true);
+                                      }}
+                                    >
+                                      ±
+                                    </Button>
+                                  )}
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {isFrozen && (
+                          <div className="mt-3 rounded border border-cyan-200 bg-white p-2.5 text-[11px] text-cyan-900">
+                            <span className="font-semibold">Frozen at: </span>
+                            {m.frozenAt ? new Date(m.frozenAt).toLocaleString() : 'N/A'}
+                            {m.freezeReason && <span className="ml-2 font-medium">({m.freezeReason})</span>}
+                            <span className="block mt-0.5 text-stone-500">
+                              Resuming will automatically push the expiration date forward by the exact number of frozen days.
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
           {/* Class Bookings & Attendance History */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
@@ -628,6 +891,255 @@ export default function StudentDetailPage() {
                 </Button>
                 <Button type="submit" variant="primary" size="sm">
                   Save & Encrypt Record
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Assign Membership / Pass Modal */}
+      {showAssignModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
+            <h2 className="text-lg font-bold text-stone-900 mb-1">Assign Membership or Pass</h2>
+            <p className="text-xs text-stone-500 mb-4">
+              Select an active plan to assign to {student.fullName}. Initial pass credits will be allocated automatically.
+            </p>
+
+            <form onSubmit={handleAssignMembership} className="space-y-4 text-xs">
+              <div>
+                <label className="block font-semibold text-stone-700 mb-1">Select Plan *</label>
+                <select
+                  required
+                  value={selectedPlanId}
+                  onChange={(e) => setSelectedPlanId(e.target.value)}
+                  className="w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                >
+                  <option value="">Choose a plan...</option>
+                  {availablePlans.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name} — ₹{p.price.toLocaleString('en-IN')} (
+                      {p.planType === 'TIME_UNLIMITED'
+                        ? 'Unlimited'
+                        : `${p.creditCount} Credits`}
+                      , {p.validityDays}d)
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-stone-700 mb-1">Start Date (Optional)</label>
+                <input
+                  type="date"
+                  value={assignStartDate}
+                  onChange={(e) => setAssignStartDate(e.target.value)}
+                  className="w-full rounded-md border border-stone-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+                <span className="text-[11px] text-stone-400 mt-0.5 block">
+                  Leave blank to activate immediately starting today.
+                </span>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-stone-700 mb-1">Internal Notes</label>
+                <textarea
+                  value={assignNotes}
+                  onChange={(e) => setAssignNotes(e.target.value)}
+                  placeholder="Payment mode, discount voucher, or trial notes..."
+                  rows={2}
+                  className="w-full rounded-md border border-stone-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-4 border-t border-stone-200">
+                <Button type="button" variant="outline" size="sm" onClick={() => setShowAssignModal(false)}>
+                  Cancel
+                </Button>
+                <Button type="submit" size="sm">
+                  Confirm Assignment
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Freeze Membership Modal */}
+      {freezeModalMembership && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
+            <h2 className="text-lg font-bold text-stone-900 mb-1">Freeze Membership</h2>
+            <p className="text-xs text-stone-500 mb-4">
+              Freeze &ldquo;{freezeModalMembership.planNameSnapshot}&rdquo;. The membership validity will pause, and expiration will extend upon resumption.
+            </p>
+
+            <form onSubmit={handleFreezeMembership} className="space-y-4 text-xs">
+              <div>
+                <label className="block font-semibold text-stone-700 mb-1">Reason for Freeze *</label>
+                <input
+                  type="text"
+                  required
+                  value={freezeReason}
+                  onChange={(e) => setFreezeReason(e.target.value)}
+                  placeholder="e.g. Work travel, medical recovery, vacation"
+                  className="w-full rounded-md border border-stone-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+
+              <div className="rounded-md bg-stone-50 p-3 text-[11px] text-stone-600 border border-stone-200">
+                Current Expiration:{' '}
+                <span className="font-semibold text-stone-900">
+                  {new Date(freezeModalMembership.expiryDate).toLocaleDateString()}
+                </span>
+                <br />
+                Freezes used so far: {freezeModalMembership.freezesUsed}
+              </div>
+
+              <div className="flex justify-end gap-2 pt-4 border-t border-stone-200">
+                <Button type="button" variant="outline" size="sm" onClick={() => setFreezeModalMembership(null)}>
+                  Cancel
+                </Button>
+                <Button type="submit" size="sm">
+                  Confirm Freeze
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Entitlement Credit Ledger Modal */}
+      {showLedgerModal && ledgerMembership && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-2xl rounded-xl bg-white p-6 shadow-xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-stone-200">
+              <div>
+                <h2 className="text-lg font-bold text-stone-900">Entitlement Credit Ledger</h2>
+                <p className="text-xs text-stone-500">
+                  {ledgerMembership.planNameSnapshot} • Current Balance: {ledgerMembership.remainingCredits} / {ledgerMembership.totalCredits} credits
+                </p>
+              </div>
+              <Button variant="outline" size="sm" onClick={() => setShowLedgerModal(false)}>
+                Close
+              </Button>
+            </div>
+
+            <div className="mt-4">
+              {ledgerEntries.length === 0 ? (
+                <div className="py-8 text-center text-xs text-stone-500">
+                  No credit transactions recorded yet.
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead>
+                      <tr className="border-b border-stone-200 text-stone-500">
+                        <th className="pb-2 font-medium">Timestamp</th>
+                        <th className="pb-2 font-medium">Type</th>
+                        <th className="pb-2 font-medium text-center">Change</th>
+                        <th className="pb-2 font-medium text-center">Balance</th>
+                        <th className="pb-2 font-medium">Reason</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-stone-100">
+                      {ledgerEntries.map((entry) => (
+                        <tr key={entry.id}>
+                          <td className="py-2 text-stone-500">
+                            {new Date(entry.createdAt).toLocaleString([], {
+                              month: 'short',
+                              day: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
+                          </td>
+                          <td className="py-2">
+                            <Badge
+                              variant={
+                                entry.entryType === 'INITIAL_ALLOCATION'
+                                  ? 'default'
+                                  : entry.entryType === 'REDEMPTION'
+                                  ? 'outline'
+                                  : entry.entryType === 'REFUND_RESTORE'
+                                  ? 'success'
+                                  : 'warning'
+                              }
+                            >
+                              {entry.entryType}
+                            </Badge>
+                          </td>
+                          <td
+                            className={`py-2 text-center font-bold ${
+                              entry.creditsDelta > 0 ? 'text-emerald-700' : 'text-rose-700'
+                            }`}
+                          >
+                            {entry.creditsDelta > 0 ? `+${entry.creditsDelta}` : entry.creditsDelta}
+                          </td>
+                          <td className="py-2 text-center font-semibold text-stone-900">
+                            {entry.balanceAfter}
+                          </td>
+                          <td className="py-2 text-stone-600">
+                            {entry.reason || '—'}
+                            {entry.performedByUserName && (
+                              <span className="block text-[10px] text-stone-400">
+                                By: {entry.performedByUserName}
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Manual Credit Adjustment Modal */}
+      {showAdjustModal && adjustMembership && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-sm rounded-xl bg-white p-6 shadow-xl">
+            <h2 className="text-lg font-bold text-stone-900 mb-1">Adjust Credit Balance</h2>
+            <p className="text-xs text-stone-500 mb-4">
+              Add or deduct class credits for &ldquo;{adjustMembership.planNameSnapshot}&rdquo;. Current balance: {adjustMembership.remainingCredits}.
+            </p>
+
+            <form onSubmit={handleAdjustCredits} className="space-y-4 text-xs">
+              <div>
+                <label className="block font-semibold text-stone-700 mb-1">Credit Delta (+ or -) *</label>
+                <input
+                  type="number"
+                  required
+                  value={adjustDelta}
+                  onChange={(e) => setAdjustDelta(parseInt(e.target.value, 10) || 0)}
+                  className="w-full rounded-md border border-stone-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+                <span className="text-[11px] text-stone-400 mt-0.5 block">
+                  Positive number to add credits (e.g. 2), negative number to deduct (e.g. -1).
+                </span>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-stone-700 mb-1">Reason *</label>
+                <input
+                  type="text"
+                  required
+                  value={adjustReason}
+                  onChange={(e) => setAdjustReason(e.target.value)}
+                  placeholder="e.g. Studio closure compensation, courtesy extension"
+                  className="w-full rounded-md border border-stone-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-4 border-t border-stone-200">
+                <Button type="button" variant="outline" size="sm" onClick={() => setShowAdjustModal(false)}>
+                  Cancel
+                </Button>
+                <Button type="submit" size="sm">
+                  Apply Adjustment
                 </Button>
               </div>
             </form>

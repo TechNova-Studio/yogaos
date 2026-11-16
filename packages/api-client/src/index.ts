@@ -52,6 +52,20 @@ import {
   MarkAttendanceRequest,
   AttendanceRecordDetails,
   SessionRoster,
+  CreateMembershipPlanRequest,
+  UpdateMembershipPlanRequest,
+  MembershipPlanDetails,
+  MembershipPlanListQuery,
+  AssignStudentMembershipRequest,
+  FreezeMembershipRequest,
+  CancelMembershipRequest,
+  StudentMembershipDetails,
+  StudentMembershipListQuery,
+  CreditLedgerEntryDetails,
+  ManualCreditAdjustmentRequest,
+  CreditLedgerListQuery,
+  CheckBookingEligibilityQuery,
+  MembershipEligibilityResult,
 } from '@yogaos/contracts';
 
 export interface ApiClientOptions {
@@ -518,6 +532,104 @@ export class ApiClient {
 
   async getStudentBookings(studentId: string): Promise<BookingDetails[]> {
     return this.request<BookingDetails[]>(`/bookings/student/${studentId}`);
+  }
+
+  // Memberships & Plans
+  async getMembershipPlans(query?: MembershipPlanListQuery): Promise<MembershipPlanDetails[]> {
+    const params = new URLSearchParams();
+    if (query?.planType) params.append('planType', query.planType);
+    if (query?.isActive !== undefined) params.append('isActive', String(query.isActive));
+    if (query?.search) params.append('search', query.search);
+    if (query?.page) params.append('page', String(query.page));
+    if (query?.limit) params.append('limit', String(query.limit));
+    const qs = params.toString() ? `?${params.toString()}` : '';
+    return this.request<MembershipPlanDetails[]>(`/memberships/plans${qs}`);
+  }
+
+  async getMembershipPlan(id: string): Promise<MembershipPlanDetails> {
+    return this.request<MembershipPlanDetails>(`/memberships/plans/${id}`);
+  }
+
+  async createMembershipPlan(data: CreateMembershipPlanRequest): Promise<MembershipPlanDetails> {
+    return this.request<MembershipPlanDetails>('/memberships/plans', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateMembershipPlan(id: string, data: UpdateMembershipPlanRequest): Promise<MembershipPlanDetails> {
+    return this.request<MembershipPlanDetails>(`/memberships/plans/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async archiveMembershipPlan(id: string): Promise<{ success: boolean; message: string }> {
+    return this.request<{ success: boolean; message: string }>(`/memberships/plans/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async assignStudentMembership(data: AssignStudentMembershipRequest): Promise<StudentMembershipDetails> {
+    return this.request<StudentMembershipDetails>('/memberships/student-memberships', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getStudentMemberships(query?: StudentMembershipListQuery): Promise<StudentMembershipDetails[]> {
+    const params = new URLSearchParams();
+    if (query?.studentId) params.append('studentId', query.studentId);
+    if (query?.status) params.append('status', query.status);
+    if (query?.page) params.append('page', String(query.page));
+    if (query?.limit) params.append('limit', String(query.limit));
+    const qs = params.toString() ? `?${params.toString()}` : '';
+    return this.request<StudentMembershipDetails[]>(`/memberships/student-memberships${qs}`);
+  }
+
+  async getStudentMembership(id: string): Promise<StudentMembershipDetails> {
+    return this.request<StudentMembershipDetails>(`/memberships/student-memberships/${id}`);
+  }
+
+  async freezeStudentMembership(id: string, data: FreezeMembershipRequest): Promise<StudentMembershipDetails> {
+    return this.request<StudentMembershipDetails>(`/memberships/student-memberships/${id}/freeze`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async unfreezeStudentMembership(id: string): Promise<StudentMembershipDetails> {
+    return this.request<StudentMembershipDetails>(`/memberships/student-memberships/${id}/unfreeze`, {
+      method: 'POST',
+    });
+  }
+
+  async cancelStudentMembership(id: string, data: CancelMembershipRequest): Promise<StudentMembershipDetails> {
+    return this.request<StudentMembershipDetails>(`/memberships/student-memberships/${id}/cancel`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getCreditLedger(query?: CreditLedgerListQuery): Promise<CreditLedgerEntryDetails[]> {
+    const params = new URLSearchParams();
+    if (query?.studentMembershipId) params.append('studentMembershipId', query.studentMembershipId);
+    if (query?.studentId) params.append('studentId', query.studentId);
+    if (query?.page) params.append('page', String(query.page));
+    if (query?.limit) params.append('limit', String(query.limit));
+    const qs = params.toString() ? `?${params.toString()}` : '';
+    return this.request<CreditLedgerEntryDetails[]>(`/memberships/credit-ledger${qs}`);
+  }
+
+  async adjustCreditsManually(membershipId: string, data: ManualCreditAdjustmentRequest): Promise<CreditLedgerEntryDetails> {
+    return this.request<CreditLedgerEntryDetails>(`/memberships/student-memberships/${membershipId}/adjust-credits`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async checkStudentEligibility(studentId: string, sessionInstanceId: string): Promise<MembershipEligibilityResult> {
+    return this.request<MembershipEligibilityResult>(`/memberships/eligibility?studentId=${studentId}&sessionInstanceId=${sessionInstanceId}`);
   }
 }
 

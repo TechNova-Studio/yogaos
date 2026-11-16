@@ -6,8 +6,10 @@ import { AttendanceService } from './attendance.service.js';
 import { CryptoService } from '../../common/services/crypto.service.js';
 import { AuditService } from '../../common/services/audit.service.js';
 import { TenantContextService } from '../../common/context/tenant-context.js';
+import { StudentPlansModule } from '../student-plans/student-plans.module.js';
 
 @Module({
+  imports: [StudentPlansModule],
   controllers: [BookingsController],
   providers: [
     BookingsService,

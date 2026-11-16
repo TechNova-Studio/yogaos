@@ -12,10 +12,18 @@ import {
   WaitlistEntryDetails,
 } from '@yogaos/contracts';
 import { AuditService } from '../../common/services/audit.service.js';
+import { CreditLedgerService } from '../student-plans/credit-ledger.service.js';
 
 @Injectable()
 export class AttendanceService {
-  constructor(private readonly audit: AuditService) {}
+  private readonly creditLedger: CreditLedgerService;
+
+  constructor(
+    private readonly audit: AuditService,
+    creditLedgerService?: CreditLedgerService
+  ) {
+    this.creditLedger = creditLedgerService ?? new CreditLedgerService(audit);
+  }
 
   async markAttendance(
     tenantId: string,
@@ -43,13 +51,44 @@ export class AttendanceService {
     const checkInMethod = (data.checkInMethod as CheckInMethod) || CheckInMethod.FRONT_DESK_ROSTER;
 
     const record = await prisma.$transaction(async (tx) => {
-      // 1. Update Booking status
+      // 1. Handle Pass Credit Deduction / Refund
+      let creditDeducted = booking.isPassCreditDeducted;
+      if (targetStatus === BookingStatus.ATTENDED) {
+        if (booking.studentMembershipId && !booking.isPassCreditDeducted) {
+          await this.creditLedger.redeemCredit(
+            tx,
+            tenantId,
+            booking.studentMembershipId,
+            booking.id,
+            userId
+          );
+          creditDeducted = true;
+        }
+      } else {
+        // If check-in is reverted and credits were deducted, restore them
+        if (booking.studentMembershipId && booking.isPassCreditDeducted) {
+          await this.creditLedger.refundCredit(
+            tx,
+            tenantId,
+            booking.studentMembershipId,
+            booking.id,
+            userId,
+            'Check-in reverted credit restore'
+          );
+          creditDeducted = false;
+        }
+      }
+
+      // 2. Update Booking status & credit flag
       await tx.booking.update({
         where: { id: booking.id },
-        data: { status: targetStatus },
+        data: {
+          status: targetStatus,
+          isPassCreditDeducted: creditDeducted,
+        },
       });
 
-      // 2. Handle AttendanceRecord
+      // 3. Handle AttendanceRecord
       if (targetStatus === BookingStatus.ATTENDED) {
         const attendanceRecord = await tx.attendanceRecord.upsert({
           where: { bookingId: booking.id },

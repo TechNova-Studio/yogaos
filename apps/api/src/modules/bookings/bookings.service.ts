@@ -12,10 +12,22 @@ import {
   BookingListQuery,
 } from '@yogaos/contracts';
 import { AuditService } from '../../common/services/audit.service.js';
+import { EligibilityService } from '../student-plans/eligibility.service.js';
+import { CreditLedgerService } from '../student-plans/credit-ledger.service.js';
 
 @Injectable()
 export class BookingsService {
-  constructor(private readonly audit: AuditService) {}
+  private readonly eligibility: EligibilityService;
+  private readonly creditLedger: CreditLedgerService;
+
+  constructor(
+    private readonly audit: AuditService,
+    eligibilityService?: EligibilityService,
+    creditLedgerService?: CreditLedgerService
+  ) {
+    this.eligibility = eligibilityService ?? new EligibilityService();
+    this.creditLedger = creditLedgerService ?? new CreditLedgerService(audit);
+  }
 
   async createBooking(
     tenantId: string,
@@ -68,7 +80,15 @@ export class BookingsService {
       throw new ConflictException('Student already has an active booking for this session');
     }
 
-    // 4. Enforce capacity transactionally
+    // 4. Check for student membership / pass eligibility
+    const eligibility = await this.eligibility.checkEligibility(
+      tenantId,
+      data.studentId,
+      data.sessionInstanceId
+    );
+    const linkedMembershipId = eligibility.eligible ? eligibility.studentMembershipId : null;
+
+    // 5. Enforce capacity transactionally
     const booking = await prisma.$transaction(async (tx) => {
       // Query current active bookings with lock or transactional count
       const activeBookingsCount = await tx.booking.count({
@@ -100,11 +120,13 @@ export class BookingsService {
           studentId: data.studentId,
           status: BookingStatus.BOOKED,
           source: (data.source as BookingSource) || BookingSource.FRONT_DESK,
+          studentMembershipId: linkedMembershipId,
           notes: data.notes ?? null,
         },
         update: {
           status: BookingStatus.BOOKED,
           source: (data.source as BookingSource) || BookingSource.FRONT_DESK,
+          studentMembershipId: linkedMembershipId,
           cancelledAt: null,
           cancellationReason: null,
           notes: data.notes !== undefined ? data.notes : undefined,
@@ -277,12 +299,25 @@ export class BookingsService {
 
     // Cancel booking and auto-promote waitlist entry if queue exists
     const updated = await prisma.$transaction(async (tx) => {
+      // Refund credit if it was previously deducted
+      if (existing.isPassCreditDeducted && existing.studentMembershipId) {
+        await this.creditLedger.refundCredit(
+          tx,
+          tenantId,
+          existing.studentMembershipId,
+          existing.id,
+          userId,
+          'Booking cancellation credit restore'
+        );
+      }
+
       const cancelledBooking = await tx.booking.update({
         where: { id: existing.id },
         data: {
           status: BookingStatus.CANCELLED,
           cancelledAt: new Date(),
           cancellationReason: data.cancellationReason ?? 'Cancelled by request',
+          isPassCreditDeducted: false,
         },
         include: {
           session: {

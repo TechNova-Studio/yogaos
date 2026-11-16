@@ -79,73 +79,74 @@ enum SessionStatus {
 }
 
 model User {
-  id               String                 @id @default(uuid())
-  email            String                 @unique
-  phone            String?
-  fullName         String
-  isEmailVerified  Boolean                @default(false)
-  isPhoneVerified  Boolean                @default(false)
-  avatarUrl        String?
-  createdAt        DateTime               @default(now())
-  updatedAt        DateTime               @updatedAt
-  deletedAt        DateTime?
+  id              String    @id @default(uuid())
+  email           String    @unique
+  phone           String?
+  fullName        String
+  isEmailVerified Boolean   @default(false)
+  isPhoneVerified Boolean   @default(false)
+  avatarUrl       String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
 
-  credentials      UserCredential[]
-  sessions         Session[]
-  resetTokens      PasswordResetToken[]
-  memberships      OrganizationMember[]
-  sentInvitations  Invitation[]           @relation("InvitedByUser")
-  auditLogs        AuditLog[]
+  credentials              UserCredential[]
+  sessions                 Session[]
+  resetTokens              PasswordResetToken[]
+  memberships              OrganizationMember[]
+  sentInvitations          Invitation[]              @relation("InvitedByUser")
+  auditLogs                AuditLog[]
   healthDisclaimersUpdated StudentHealthDisclaimer[]
-  studentActivities StudentActivity[]
-  instructorBatches ClassBatch[]            @relation("InstructorBatches")
-  instructorSessions ClassSessionInstance[] @relation("InstructorSessions")
-  instructorProfiles InstructorProfile[]
-  attendanceMarked AttendanceRecord[]       @relation("AttendanceMarkedByUser")
+  studentActivities        StudentActivity[]
+  instructorBatches        ClassBatch[]              @relation("InstructorBatches")
+  instructorSessions       ClassSessionInstance[]    @relation("InstructorSessions")
+  instructorProfiles       InstructorProfile[]
+  attendanceMarked         AttendanceRecord[]        @relation("AttendanceMarkedByUser")
+  creditLedgerActions      MembershipCreditLedger[]  @relation("CreditActionByUser")
 
   @@index([email])
   @@index([phone])
 }
 
 model UserCredential {
-  id          String   @id @default(uuid())
-  userId      String
-  type        String   @default("PASSWORD") // PASSWORD, OAUTH_GOOGLE, etc.
-  secretHash  String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id         String   @id @default(uuid())
+  userId     String
+  type       String   @default("PASSWORD") // PASSWORD, OAUTH_GOOGLE, etc.
+  secretHash String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, type])
 }
 
 model PasswordResetToken {
-  id          String    @id @default(uuid())
-  userId      String
-  tokenHash   String    @unique
-  expiresAt   DateTime
-  usedAt      DateTime?
-  createdAt   DateTime  @default(now())
+  id        String    @id @default(uuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
 
-  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([tokenHash])
 }
 
 model Session {
-  id              String    @id @default(uuid())
-  userId          String
-  tokenHash       String    @unique
-  activeTenantId  String?
-  userAgent       String?
-  ipAddress       String?
-  expiresAt       DateTime
-  revokedAt       DateTime?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  id             String    @id @default(uuid())
+  userId         String
+  tokenHash      String    @unique
+  activeTenantId String?
+  userAgent      String?
+  ipAddress      String?
+  expiresAt      DateTime
+  revokedAt      DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
-  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([tokenHash])
@@ -153,48 +154,51 @@ model Session {
 }
 
 model Organization {
-  id               String               @id @default(uuid())
-  name             String
-  slug             String               @unique
-  legalEntityName  String?
-  currency         String               @default("INR")
-  timezone         String               @default("Asia/Kolkata")
-  isGstRegistered  Boolean              @default(false)
-  gstin            String?
-  panNumber        String?
-  billingAddress   Json?
-  settings         Json?
-  createdAt        DateTime             @default(now())
-  updatedAt        DateTime             @updatedAt
-  deletedAt        DateTime?
+  id              String    @id @default(uuid())
+  name            String
+  slug            String    @unique
+  legalEntityName String?
+  currency        String    @default("INR")
+  timezone        String    @default("Asia/Kolkata")
+  isGstRegistered Boolean   @default(false)
+  gstin           String?
+  panNumber       String?
+  billingAddress  Json?
+  settings        Json?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
 
-  members          OrganizationMember[]
-  invitations      Invitation[]
-  auditLogs        AuditLog[]
-  branches         Branch[]
-  rooms            Room[]
-  students         Student[]
-  leads            Lead[]
-  classTypes       ClassType[]
-  batches          ClassBatch[]
-  sessions         ClassSessionInstance[]
-  instructorProfiles InstructorProfile[]
-  bookings         Booking[]
-  waitlistEntries  WaitlistEntry[]
-  attendanceRecords AttendanceRecord[]
+  members                 OrganizationMember[]
+  invitations             Invitation[]
+  auditLogs               AuditLog[]
+  branches                Branch[]
+  rooms                   Room[]
+  students                Student[]
+  leads                   Lead[]
+  classTypes              ClassType[]
+  batches                 ClassBatch[]
+  sessions                ClassSessionInstance[]
+  instructorProfiles      InstructorProfile[]
+  bookings                Booking[]
+  waitlistEntries         WaitlistEntry[]
+  attendanceRecords       AttendanceRecord[]
+  membershipPlans         MembershipPlan[]
+  studentMemberships      StudentMembership[]
+  membershipCreditLedgers MembershipCreditLedger[]
 
   @@index([slug])
 }
 
 model OrganizationMember {
-  id          String        @id @default(uuid())
+  id          String       @id @default(uuid())
   tenantId    String
   userId      String
-  role        UserRole      @default(INSTRUCTOR)
-  status      MemberStatus  @default(ACTIVE)
+  role        UserRole     @default(INSTRUCTOR)
+  status      MemberStatus @default(ACTIVE)
   branchScope Json?
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
 
   organization Organization @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -216,8 +220,8 @@ model Invitation {
   acceptedAt      DateTime?
   createdAt       DateTime         @default(now())
 
-  organization    Organization     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  invitedByUser   User             @relation("InvitedByUser", fields: [invitedByUserId], references: [id], onDelete: Cascade)
+  organization  Organization @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  invitedByUser User         @relation("InvitedByUser", fields: [invitedByUserId], references: [id], onDelete: Cascade)
 
   @@index([tenantId, status])
   @@index([email])
@@ -225,7 +229,7 @@ model Invitation {
 }
 
 model AuditLog {
-  id           String        @id @default(uuid())
+  id           String   @id @default(uuid())
   tenantId     String?
   userId       String?
   action       String
@@ -234,7 +238,7 @@ model AuditLog {
   ipAddress    String?
   userAgent    String?
   details      Json?
-  createdAt    DateTime      @default(now())
+  createdAt    DateTime @default(now())
 
   organization Organization? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   user         User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
@@ -251,29 +255,31 @@ model SystemHealthCheck {
 }
 
 model Branch {
-  id              String        @id @default(uuid())
-  tenantId        String
-  name            String
-  slug            String
-  streetAddress   String
-  city            String
-  state           String
-  stateCode       String        // Indian 2-digit GST state code, e.g. '29'
-  postalCode      String
-  phone           String
-  email           String
-  operatingHours  Json?
-  isActive        Boolean       @default(true)
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
-  deletedAt       DateTime?
+  id             String    @id @default(uuid())
+  tenantId       String
+  name           String
+  slug           String
+  streetAddress  String
+  city           String
+  state          String
+  stateCode      String // Indian 2-digit GST state code, e.g. '29'
+  postalCode     String
+  phone          String
+  email          String
+  operatingHours Json?
+  isActive       Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
 
-  organization    Organization  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  rooms           Room[]
-  students        Student[]
-  leads           Lead[]
-  batches         ClassBatch[]
-  sessions        ClassSessionInstance[]
+  organization       Organization           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  rooms              Room[]
+  students           Student[]
+  leads              Lead[]
+  batches            ClassBatch[]
+  sessions           ClassSessionInstance[]
+  membershipPlans    MembershipPlan[]
+  studentMemberships StudentMembership[]
 
   @@unique([tenantId, slug])
   @@index([tenantId, stateCode])
@@ -281,53 +287,55 @@ model Branch {
 }
 
 model Room {
-  id              String        @id @default(uuid())
-  tenantId        String
-  branchId        String
-  name            String
-  description     String?
-  maxMatCapacity  Int
-  isActive        Boolean       @default(true)
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
+  id             String   @id @default(uuid())
+  tenantId       String
+  branchId       String
+  name           String
+  description    String?
+  maxMatCapacity Int
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
-  organization    Organization  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  branch          Branch        @relation(fields: [branchId], references: [id], onDelete: Cascade)
-  batches         ClassBatch[]
-  sessions        ClassSessionInstance[]
+  organization Organization           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branch       Branch                 @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  batches      ClassBatch[]
+  sessions     ClassSessionInstance[]
 
   @@index([tenantId, branchId])
   @@index([tenantId, isActive])
 }
 
 model Student {
-  id                      String                   @id @default(uuid())
-  tenantId                String
-  homeBranchId            String
-  fullName                String
-  mobilePhone             String
-  email                   String?
-  dateOfBirth             DateTime?
-  gender                  String?
-  emergencyContactName    String
-  emergencyContactPhone   String
+  id                       String        @id @default(uuid())
+  tenantId                 String
+  homeBranchId             String
+  fullName                 String
+  mobilePhone              String
+  email                    String?
+  dateOfBirth              DateTime?
+  gender                   String?
+  emergencyContactName     String
+  emergencyContactPhone    String
   emergencyContactRelation String
-  status                  StudentStatus            @default(ACTIVE)
-  billingAddress          Json?
-  billingStateCode        String?
-  hasHealthAlert          Boolean                  @default(false)
-  createdAt               DateTime                 @default(now())
-  updatedAt               DateTime                 @updatedAt
-  deletedAt               DateTime?
+  status                   StudentStatus @default(ACTIVE)
+  billingAddress           Json?
+  billingStateCode         String?
+  hasHealthAlert           Boolean       @default(false)
+  createdAt                DateTime      @default(now())
+  updatedAt                DateTime      @updatedAt
+  deletedAt                DateTime?
 
-  organization            Organization             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  homeBranch              Branch                   @relation(fields: [homeBranchId], references: [id], onDelete: Restrict)
-  healthDisclaimer        StudentHealthDisclaimer?
-  consents                StudentConsent[]
-  activities              StudentActivity[]
-  convertedFromLead       Lead?                    @relation("ConvertedLeadStudent")
-  bookings                Booking[]
-  waitlistEntries         WaitlistEntry[]
+  organization        Organization             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  homeBranch          Branch                   @relation(fields: [homeBranchId], references: [id], onDelete: Restrict)
+  healthDisclaimer    StudentHealthDisclaimer?
+  consents            StudentConsent[]
+  activities          StudentActivity[]
+  convertedFromLead   Lead?                    @relation("ConvertedLeadStudent")
+  bookings            Booking[]
+  waitlistEntries     WaitlistEntry[]
+  memberships         StudentMembership[]
+  creditLedgerEntries MembershipCreditLedger[]
 
   @@index([tenantId, mobilePhone])
   @@index([tenantId, email])
@@ -337,78 +345,78 @@ model Student {
 }
 
 model StudentHealthDisclaimer {
-  id                     String    @id @default(uuid())
-  tenantId               String
-  studentId              String    @unique
-  injurySummary          String?   // Short non-clinical summary e.g. "Lower Back L4/L5, Right Wrist"
-  healthNotesCiphertext  String    // AES-256-GCM encrypted detailed narrative
-  healthNotesIv          String    // 12-byte IV hex string
-  healthNotesTag         String    // 16-byte GCM authentication tag hex string
-  hasPregnancyAlert      Boolean   @default(false)
-  consentSigned          Boolean   @default(true)
-  consentTimestamp       DateTime  @default(now())
-  consentIpAddress       String?
-  updatedByUserId        String?
-  updatedAt              DateTime  @updatedAt
+  id                    String   @id @default(uuid())
+  tenantId              String
+  studentId             String   @unique
+  injurySummary         String? // Short non-clinical summary e.g. "Lower Back L4/L5, Right Wrist"
+  healthNotesCiphertext String // AES-256-GCM encrypted detailed narrative
+  healthNotesIv         String // 12-byte IV hex string
+  healthNotesTag        String // 16-byte GCM authentication tag hex string
+  hasPregnancyAlert     Boolean  @default(false)
+  consentSigned         Boolean  @default(true)
+  consentTimestamp      DateTime @default(now())
+  consentIpAddress      String?
+  updatedByUserId       String?
+  updatedAt             DateTime @updatedAt
 
-  student                Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  updatedByUser          User?     @relation(fields: [updatedByUserId], references: [id], onDelete: SetNull)
+  student       Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  updatedByUser User?   @relation(fields: [updatedByUserId], references: [id], onDelete: SetNull)
 
   @@index([tenantId, studentId])
 }
 
 model StudentConsent {
-  id              String        @id @default(uuid())
-  tenantId        String
-  studentId       String
-  consentType     String        // LIABILITY_WAIVER, GENERAL_TERMS, PHOTO_VIDEO_RELEASE
-  version         String        @default("1.0")
-  isAgreed        Boolean       @default(true)
-  agreedAt        DateTime      @default(now())
-  ipAddress       String?
-  userAgent       String?
+  id          String   @id @default(uuid())
+  tenantId    String
+  studentId   String
+  consentType String // LIABILITY_WAIVER, GENERAL_TERMS, PHOTO_VIDEO_RELEASE
+  version     String   @default("1.0")
+  isAgreed    Boolean  @default(true)
+  agreedAt    DateTime @default(now())
+  ipAddress   String?
+  userAgent   String?
 
-  student         Student       @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
 
   @@index([tenantId, studentId])
 }
 
 model StudentActivity {
-  id                  String        @id @default(uuid())
-  tenantId            String
-  studentId           String
-  activityType        String        // REGISTERED, PROFILE_UPDATED, HEALTH_DISCLAIMER_UPDATED, CONSENT_SIGNED, LEAD_CONVERTED, STAFF_NOTE
-  title               String
-  description         String?
-  performedByUserId   String?
-  metadata            Json?
-  createdAt           DateTime      @default(now())
+  id                String   @id @default(uuid())
+  tenantId          String
+  studentId         String
+  activityType      String // REGISTERED, PROFILE_UPDATED, HEALTH_DISCLAIMER_UPDATED, CONSENT_SIGNED, LEAD_CONVERTED, STAFF_NOTE
+  title             String
+  description       String?
+  performedByUserId String?
+  metadata          Json?
+  createdAt         DateTime @default(now())
 
-  student             Student       @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  performedByUser     User?         @relation(fields: [performedByUserId], references: [id], onDelete: SetNull)
+  student         Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  performedByUser User?   @relation(fields: [performedByUserId], references: [id], onDelete: SetNull)
 
   @@index([tenantId, studentId, createdAt])
 }
 
 model Lead {
-  id                  String        @id @default(uuid())
-  tenantId            String
-  branchId            String?
-  fullName            String
-  phone               String
-  email               String?
-  source              LeadSource    @default(WALK_IN)
-  interestedProgram   String?
-  status              LeadStatus    @default(NEW)
-  followUpDate        DateTime?
-  notes               String?
-  convertedStudentId  String?       @unique
-  createdAt           DateTime      @default(now())
-  updatedAt           DateTime      @updatedAt
+  id                 String     @id @default(uuid())
+  tenantId           String
+  branchId           String?
+  fullName           String
+  phone              String
+  email              String?
+  source             LeadSource @default(WALK_IN)
+  interestedProgram  String?
+  status             LeadStatus @default(NEW)
+  followUpDate       DateTime?
+  notes              String?
+  convertedStudentId String?    @unique
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
 
-  organization        Organization  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  branch              Branch?       @relation(fields: [branchId], references: [id], onDelete: SetNull)
-  convertedStudent    Student?      @relation("ConvertedLeadStudent", fields: [convertedStudentId], references: [id], onDelete: SetNull)
+  organization     Organization @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branch           Branch?      @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  convertedStudent Student?     @relation("ConvertedLeadStudent", fields: [convertedStudentId], references: [id], onDelete: SetNull)
 
   @@index([tenantId, status])
   @@index([tenantId, phone])
@@ -416,23 +424,23 @@ model Lead {
 }
 
 model ClassType {
-  id                   String        @id @default(uuid())
-  tenantId             String
-  name                 String
-  description          String?
-  category             String        @default("Hatha")
-  level                ClassLevel    @default(ALL_LEVELS)
-  defaultDurationMins  Int           @default(60)
-  defaultCapacity      Int           @default(20)
-  intensity            String?
-  isActive             Boolean       @default(true)
-  createdAt            DateTime      @default(now())
-  updatedAt            DateTime      @updatedAt
-  deletedAt            DateTime?
+  id                  String     @id @default(uuid())
+  tenantId            String
+  name                String
+  description         String?
+  category            String     @default("Hatha")
+  level               ClassLevel @default(ALL_LEVELS)
+  defaultDurationMins Int        @default(60)
+  defaultCapacity     Int        @default(20)
+  intensity           String?
+  isActive            Boolean    @default(true)
+  createdAt           DateTime   @default(now())
+  updatedAt           DateTime   @updatedAt
+  deletedAt           DateTime?
 
-  organization         Organization  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  batches              ClassBatch[]
-  sessions             ClassSessionInstance[]
+  organization Organization           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  batches      ClassBatch[]
+  sessions     ClassSessionInstance[]
 
   @@unique([tenantId, name])
   @@index([tenantId, isActive])
@@ -440,53 +448,53 @@ model ClassType {
 }
 
 model InstructorProfile {
-  id              String        @id @default(uuid())
-  tenantId        String
-  userId          String
-  displayName     String
-  bio             String?
-  certifications  String[]      @default([])
-  teachingStyles  String[]      @default([])
-  hourlyRate      Decimal?      @db.Decimal(10, 2)
-  isActive        Boolean       @default(true)
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
+  id             String   @id @default(uuid())
+  tenantId       String
+  userId         String
+  displayName    String
+  bio            String?
+  certifications String[] @default([])
+  teachingStyles String[] @default([])
+  hourlyRate     Decimal? @db.Decimal(10, 2)
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
-  organization    Organization  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([tenantId, userId])
   @@index([tenantId, userId])
 }
 
 model ClassBatch {
-  id                   String             @id @default(uuid())
-  tenantId             String
-  classTypeId          String
-  branchId             String
-  roomId               String
-  instructorId         String
-  name                 String
-  description          String?
-  scheduleType         BatchScheduleType  @default(RECURRING_WEEKLY)
-  status               BatchStatus        @default(DRAFT)
-  startDate            DateTime
-  endDate              DateTime?
-  capacity             Int
-  sessionDurationMins  Int                @default(60)
-  daysOfWeek           Int[]
-  startTime            String
-  endTime              String
-  createdAt            DateTime           @default(now())
-  updatedAt            DateTime           @updatedAt
-  deletedAt            DateTime?
+  id                  String            @id @default(uuid())
+  tenantId            String
+  classTypeId         String
+  branchId            String
+  roomId              String
+  instructorId        String
+  name                String
+  description         String?
+  scheduleType        BatchScheduleType @default(RECURRING_WEEKLY)
+  status              BatchStatus       @default(DRAFT)
+  startDate           DateTime
+  endDate             DateTime?
+  capacity            Int
+  sessionDurationMins Int               @default(60)
+  daysOfWeek          Int[]
+  startTime           String
+  endTime             String
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+  deletedAt           DateTime?
 
-  organization         Organization       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  classType            ClassType          @relation(fields: [classTypeId], references: [id], onDelete: Restrict)
-  branch               Branch             @relation(fields: [branchId], references: [id], onDelete: Restrict)
-  room                 Room               @relation(fields: [roomId], references: [id], onDelete: Restrict)
-  instructor           User               @relation("InstructorBatches", fields: [instructorId], references: [id], onDelete: Restrict)
-  sessions             ClassSessionInstance[]
+  organization Organization           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  classType    ClassType              @relation(fields: [classTypeId], references: [id], onDelete: Restrict)
+  branch       Branch                 @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  room         Room                   @relation(fields: [roomId], references: [id], onDelete: Restrict)
+  instructor   User                   @relation("InstructorBatches", fields: [instructorId], references: [id], onDelete: Restrict)
+  sessions     ClassSessionInstance[]
 
   @@index([tenantId, status])
   @@index([tenantId, branchId])
@@ -495,31 +503,31 @@ model ClassBatch {
 }
 
 model ClassSessionInstance {
-  id                   String        @id @default(uuid())
-  tenantId             String
-  batchId              String?
-  classTypeId          String
-  branchId             String
-  roomId               String
-  instructorId         String
-  sessionDate          DateTime
-  startTimestamp       DateTime
-  endTimestamp         DateTime
-  capacity             Int
-  status               SessionStatus @default(SCHEDULED)
-  cancellationReason   String?
-  notes                String?
-  createdAt            DateTime      @default(now())
-  updatedAt            DateTime      @updatedAt
+  id                 String        @id @default(uuid())
+  tenantId           String
+  batchId            String?
+  classTypeId        String
+  branchId           String
+  roomId             String
+  instructorId       String
+  sessionDate        DateTime
+  startTimestamp     DateTime
+  endTimestamp       DateTime
+  capacity           Int
+  status             SessionStatus @default(SCHEDULED)
+  cancellationReason String?
+  notes              String?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
 
-  organization         Organization  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  batch                ClassBatch?   @relation(fields: [batchId], references: [id], onDelete: SetNull)
-  classType            ClassType     @relation(fields: [classTypeId], references: [id], onDelete: Restrict)
-  branch               Branch        @relation(fields: [branchId], references: [id], onDelete: Restrict)
-  room                 Room          @relation(fields: [roomId], references: [id], onDelete: Restrict)
-  instructor           User          @relation("InstructorSessions", fields: [instructorId], references: [id], onDelete: Restrict)
-  bookings             Booking[]
-  waitlistEntries      WaitlistEntry[]
+  organization    Organization    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  batch           ClassBatch?     @relation(fields: [batchId], references: [id], onDelete: SetNull)
+  classType       ClassType       @relation(fields: [classTypeId], references: [id], onDelete: Restrict)
+  branch          Branch          @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  room            Room            @relation(fields: [roomId], references: [id], onDelete: Restrict)
+  instructor      User            @relation("InstructorSessions", fields: [instructorId], references: [id], onDelete: Restrict)
+  bookings        Booking[]
+  waitlistEntries WaitlistEntry[]
 
   @@index([tenantId, sessionDate])
   @@index([tenantId, startTimestamp])
@@ -561,48 +569,52 @@ enum CheckInMethod {
 }
 
 model Booking {
-  id                    String        @id @default(uuid())
-  tenantId              String
-  sessionInstanceId     String
-  studentId             String
-  status                BookingStatus @default(BOOKED)
-  source                BookingSource @default(FRONT_DESK)
-  bookedAt              DateTime      @default(now())
-  cancelledAt           DateTime?
-  cancellationReason    String?
-  notes                 String?
-  isPassCreditDeducted  Boolean       @default(false)
-  createdAt             DateTime      @default(now())
-  updatedAt             DateTime      @updatedAt
+  id                   String        @id @default(uuid())
+  tenantId             String
+  sessionInstanceId    String
+  studentId            String
+  status               BookingStatus @default(BOOKED)
+  source               BookingSource @default(FRONT_DESK)
+  bookedAt             DateTime      @default(now())
+  cancelledAt          DateTime?
+  cancellationReason   String?
+  notes                String?
+  studentMembershipId  String?
+  isPassCreditDeducted Boolean       @default(false)
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
 
-  organization          Organization         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  session               ClassSessionInstance @relation(fields: [sessionInstanceId], references: [id], onDelete: Cascade)
-  student               Student              @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  attendance            AttendanceRecord?
-  promotedFromWaitlist  WaitlistEntry?       @relation("PromotedBooking")
+  organization         Organization             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  session              ClassSessionInstance     @relation(fields: [sessionInstanceId], references: [id], onDelete: Cascade)
+  student              Student                  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  studentMembership    StudentMembership?       @relation(fields: [studentMembershipId], references: [id], onDelete: SetNull)
+  attendance           AttendanceRecord?
+  promotedFromWaitlist WaitlistEntry?           @relation("PromotedBooking")
+  creditLedgerEntries  MembershipCreditLedger[]
 
   @@unique([tenantId, sessionInstanceId, studentId])
   @@index([tenantId, sessionInstanceId, status])
   @@index([tenantId, studentId])
   @@index([sessionInstanceId, status])
+  @@index([studentMembershipId])
 }
 
 model WaitlistEntry {
-  id                    String         @id @default(uuid())
-  tenantId              String
-  sessionInstanceId     String
-  studentId             String
-  priorityRank          Int
-  status                WaitlistStatus @default(WAITING)
-  promotedToBookingId   String?        @unique
-  notes                 String?
-  createdAt             DateTime       @default(now())
-  updatedAt             DateTime       @updatedAt
+  id                  String         @id @default(uuid())
+  tenantId            String
+  sessionInstanceId   String
+  studentId           String
+  priorityRank        Int
+  status              WaitlistStatus @default(WAITING)
+  promotedToBookingId String?        @unique
+  notes               String?
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
 
-  organization          Organization         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  session               ClassSessionInstance @relation(fields: [sessionInstanceId], references: [id], onDelete: Cascade)
-  student               Student              @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  promotedToBooking     Booking?             @relation("PromotedBooking", fields: [promotedToBookingId], references: [id], onDelete: SetNull)
+  organization      Organization         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  session           ClassSessionInstance @relation(fields: [sessionInstanceId], references: [id], onDelete: Cascade)
+  student           Student              @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  promotedToBooking Booking?             @relation("PromotedBooking", fields: [promotedToBookingId], references: [id], onDelete: SetNull)
 
   @@unique([tenantId, sessionInstanceId, priorityRank])
   @@unique([tenantId, sessionInstanceId, studentId])
@@ -611,20 +623,133 @@ model WaitlistEntry {
 }
 
 model AttendanceRecord {
-  id                    String        @id @default(uuid())
-  tenantId              String
-  bookingId             String        @unique
-  checkedInAt           DateTime      @default(now())
-  checkedInByUserId     String
-  checkInMethod         CheckInMethod @default(FRONT_DESK_ROSTER)
-  notes                 String?
-  createdAt             DateTime      @default(now())
-  updatedAt             DateTime      @updatedAt
+  id                String        @id @default(uuid())
+  tenantId          String
+  bookingId         String        @unique
+  checkedInAt       DateTime      @default(now())
+  checkedInByUserId String
+  checkInMethod     CheckInMethod @default(FRONT_DESK_ROSTER)
+  notes             String?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
 
-  organization          Organization  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  booking               Booking       @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-  checkedInByUser       User          @relation("AttendanceMarkedByUser", fields: [checkedInByUserId], references: [id], onDelete: Restrict)
+  organization    Organization @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  booking         Booking      @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  checkedInByUser User         @relation("AttendanceMarkedByUser", fields: [checkedInByUserId], references: [id], onDelete: Restrict)
 
   @@index([tenantId, checkedInAt])
   @@index([checkedInByUserId])
+}
+
+// ----------------------------------------------------------------------------
+// P11: Membership Plans, Student Memberships & Class Passes
+// ----------------------------------------------------------------------------
+
+enum PlanType {
+  TIME_UNLIMITED
+  CLASS_PACK
+  SINGLE_DROP_IN
+}
+
+enum MembershipStatus {
+  ACTIVE
+  FROZEN
+  EXPIRED
+  CANCELLED
+}
+
+enum CreditLedgerEntryType {
+  INITIAL_ALLOCATION
+  REDEMPTION
+  REFUND_RESTORE
+  MANUAL_ADJUSTMENT
+  EXPIRATION
+}
+
+model MembershipPlan {
+  id                 String    @id @default(uuid())
+  tenantId           String
+  name               String
+  description        String?
+  planType           PlanType
+  price              Decimal   @db.Decimal(10, 2)
+  taxRatePercent     Decimal   @default(18.00) @db.Decimal(5, 2)
+  sacCode            String    @default("9992")
+  validityDays       Int
+  creditCount        Int?
+  maxFreezesAllowed  Int       @default(0)
+  maxFreezeDays      Int       @default(0)
+  isMultiBranchValid Boolean   @default(true)
+  homeBranchId       String?
+  isActive           Boolean   @default(true)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  deletedAt          DateTime?
+
+  organization Organization        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  homeBranch   Branch?             @relation(fields: [homeBranchId], references: [id], onDelete: SetNull)
+  memberships  StudentMembership[]
+
+  @@index([tenantId, isActive])
+  @@index([tenantId, planType])
+}
+
+model StudentMembership {
+  id                    String           @id @default(uuid())
+  tenantId              String
+  studentId             String
+  membershipPlanId      String
+  homeBranchId          String?
+  planNameSnapshot      String
+  planTypeSnapshot      PlanType
+  priceSnapshot         Decimal          @db.Decimal(10, 2)
+  isMultiBranchSnapshot Boolean          @default(true)
+  status                MembershipStatus @default(ACTIVE)
+  startDate             DateTime
+  expiryDate            DateTime
+  totalCredits          Int?
+  remainingCredits      Int?
+  freezesUsed           Int              @default(0)
+  frozenAt              DateTime?
+  freezeReason          String?
+  totalFrozenDays       Int              @default(0)
+  notes                 String?
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
+  deletedAt             DateTime?
+
+  organization Organization             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  student      Student                  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  plan         MembershipPlan           @relation(fields: [membershipPlanId], references: [id], onDelete: Restrict)
+  homeBranch   Branch?                  @relation(fields: [homeBranchId], references: [id], onDelete: SetNull)
+  bookings     Booking[]
+  creditLedger MembershipCreditLedger[]
+
+  @@index([tenantId, studentId, status])
+  @@index([tenantId, expiryDate])
+  @@index([membershipPlanId])
+}
+
+model MembershipCreditLedger {
+  id                  String                @id @default(uuid())
+  tenantId            String
+  studentMembershipId String
+  studentId           String
+  bookingId           String?
+  entryType           CreditLedgerEntryType
+  creditsDelta        Int
+  balanceAfter        Int
+  reason              String?
+  performedByUserId   String?
+  createdAt           DateTime              @default(now())
+
+  organization    Organization      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  membership      StudentMembership @relation(fields: [studentMembershipId], references: [id], onDelete: Cascade)
+  student         Student           @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  booking         Booking?          @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+  performedByUser User?             @relation("CreditActionByUser", fields: [performedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, studentMembershipId, createdAt])
+  @@index([tenantId, studentId])
+  @@index([bookingId])
 }
