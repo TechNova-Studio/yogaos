@@ -13,6 +13,7 @@ import { StudentPlansModule } from './modules/student-plans/student-plans.module
 import { BillingModule } from './modules/billing/billing.module.js';
 import { MediaModule } from './modules/media/media.module.js';
 import { AsanaModule } from './modules/asana/asana.module.js';
+import { SequencesModule } from './modules/sequences/sequences.module.js';
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { AsanaModule } from './modules/asana/asana.module.js';
     BillingModule,
     MediaModule,
     AsanaModule,
+    SequencesModule,
   ],
 })
 export class AppModule {}

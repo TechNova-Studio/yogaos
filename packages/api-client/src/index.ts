@@ -98,6 +98,12 @@ import {
   UpdateMediaAssetInput,
   ReplaceMediaAssetInput,
   MediaListQuery,
+  CreateSequenceInput,
+  UpdateSequenceInput,
+  SequenceListQuery,
+  ReorderSequenceStepsInput,
+  PublishSequenceInput,
+  SequenceStepInput,
 } from '@yogaos/contracts';
 
 export interface ApiClientOptions {
@@ -956,6 +962,85 @@ export class ApiClient {
   async archiveMediaAsset(id: string): Promise<any> {
     return this.request<any>(`/media/${id}`, {
       method: 'DELETE',
+    });
+  }
+
+  // --------------------------------------------------------------------------
+  // Instructor Sequence Builder (P15)
+  // --------------------------------------------------------------------------
+  async getSequences(query?: SequenceListQuery): Promise<any> {
+    const params = new URLSearchParams();
+    if (query?.search) params.append('search', query.search);
+    if (query?.targetLevel) params.append('targetLevel', query.targetLevel);
+    if (query?.status) params.append('status', query.status);
+    if (query?.isStudioTemplate !== undefined) params.append('isStudioTemplate', String(query.isStudioTemplate));
+    if (query?.page) params.append('page', String(query.page));
+    if (query?.limit) params.append('limit', String(query.limit));
+    const qs = params.toString() ? `?${params.toString()}` : '';
+    return this.request<any>(`/sequences${qs}`);
+  }
+
+  async getSequence(id: string): Promise<any> {
+    return this.request<any>(`/sequences/${id}`);
+  }
+
+  async createSequence(data: CreateSequenceInput): Promise<any> {
+    return this.request<any>('/sequences', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateSequence(id: string, data: UpdateSequenceInput): Promise<any> {
+    return this.request<any>(`/sequences/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async duplicateSequence(id: string): Promise<any> {
+    return this.request<any>(`/sequences/${id}/duplicate`, {
+      method: 'POST',
+    });
+  }
+
+  async publishSequence(id: string, data?: PublishSequenceInput): Promise<any> {
+    return this.request<any>(`/sequences/${id}/publish`, {
+      method: 'POST',
+      body: JSON.stringify(data ?? {}),
+    });
+  }
+
+  async archiveSequence(id: string): Promise<any> {
+    return this.request<any>(`/sequences/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async addSequenceStep(sequenceId: string, data: SequenceStepInput): Promise<any> {
+    return this.request<any>(`/sequences/${sequenceId}/steps`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateSequenceStep(sequenceId: string, stepId: string, data: Partial<SequenceStepInput>): Promise<any> {
+    return this.request<any>(`/sequences/${sequenceId}/steps/${stepId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteSequenceStep(sequenceId: string, stepId: string): Promise<any> {
+    return this.request<any>(`/sequences/${sequenceId}/steps/${stepId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async reorderSequenceSteps(sequenceId: string, data: ReorderSequenceStepsInput): Promise<any> {
+    return this.request<any>(`/sequences/${sequenceId}/steps/reorder`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
     });
   }
 }

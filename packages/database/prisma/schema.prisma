@@ -108,6 +108,7 @@ model User {
   creditNotesIssued        CreditNote[]              @relation("CreditNotesIssuedByUser")
   uploadedMedia            MediaAsset[]              @relation("MediaUploadedByUser")
   createdAsanas            Asana[]                   @relation("AsanasCreatedByUser")
+  createdSequences         Sequence[]                @relation("SequencesCreatedByUser")
 
   @@index([email])
   @@index([phone])
@@ -200,6 +201,9 @@ model Organization {
   webhookEvents           WebhookEvent[]
   asanas                  Asana[]
   mediaAssets             MediaAsset[]
+  sequences               Sequence[]
+  sequenceVersions        SequenceVersion[]
+  sequenceSteps           SequenceStep[]
 
   @@index([slug])
 }
@@ -523,31 +527,33 @@ model ClassBatch {
 }
 
 model ClassSessionInstance {
-  id                 String        @id @default(uuid())
-  tenantId           String
-  batchId            String?
-  classTypeId        String
-  branchId           String
-  roomId             String
-  instructorId       String
-  sessionDate        DateTime
-  startTimestamp     DateTime
-  endTimestamp       DateTime
-  capacity           Int
-  status             SessionStatus @default(SCHEDULED)
-  cancellationReason String?
-  notes              String?
-  createdAt          DateTime      @default(now())
-  updatedAt          DateTime      @updatedAt
+  id                        String        @id @default(uuid())
+  tenantId                  String
+  batchId                   String?
+  classTypeId               String
+  branchId                  String
+  roomId                    String
+  instructorId              String
+  sessionDate               DateTime
+  startTimestamp            DateTime
+  endTimestamp              DateTime
+  capacity                  Int
+  status                    SessionStatus @default(SCHEDULED)
+  attachedSequenceVersionId String?
+  cancellationReason        String?
+  notes                     String?
+  createdAt                 DateTime      @default(now())
+  updatedAt                 DateTime      @updatedAt
 
-  organization    Organization    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  batch           ClassBatch?     @relation(fields: [batchId], references: [id], onDelete: SetNull)
-  classType       ClassType       @relation(fields: [classTypeId], references: [id], onDelete: Restrict)
-  branch          Branch          @relation(fields: [branchId], references: [id], onDelete: Restrict)
-  room            Room            @relation(fields: [roomId], references: [id], onDelete: Restrict)
-  instructor      User            @relation("InstructorSessions", fields: [instructorId], references: [id], onDelete: Restrict)
-  bookings        Booking[]
-  waitlistEntries WaitlistEntry[]
+  organization            Organization     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  batch                   ClassBatch?      @relation(fields: [batchId], references: [id], onDelete: SetNull)
+  classType               ClassType        @relation(fields: [classTypeId], references: [id], onDelete: Restrict)
+  branch                  Branch           @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  room                    Room             @relation(fields: [roomId], references: [id], onDelete: Restrict)
+  instructor              User             @relation("InstructorSessions", fields: [instructorId], references: [id], onDelete: Restrict)
+  attachedSequenceVersion SequenceVersion? @relation(fields: [attachedSequenceVersionId], references: [id], onDelete: SetNull)
+  bookings                Booking[]
+  waitlistEntries         WaitlistEntry[]
 
   @@index([tenantId, sessionDate])
   @@index([tenantId, startTimestamp])
@@ -1195,10 +1201,11 @@ model Asana {
   updatedAt         DateTime        @updatedAt
   deletedAt         DateTime?
 
-  organization  Organization? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  createdByUser User?         @relation("AsanasCreatedByUser", fields: [createdByUserId], references: [id], onDelete: SetNull)
-  primaryMedia  MediaAsset?   @relation("AsanaPrimaryMedia", fields: [primaryMediaId], references: [id], onDelete: SetNull)
+  organization  Organization?  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  createdByUser User?          @relation("AsanasCreatedByUser", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  primaryMedia  MediaAsset?    @relation("AsanaPrimaryMedia", fields: [primaryMediaId], references: [id], onDelete: SetNull)
   mediaList     AsanaMedia[]
+  sequenceSteps SequenceStep[]
 
   @@index([tenantId, category, difficulty])
   @@index([tenantId, status])
@@ -1227,10 +1234,13 @@ model MediaAsset {
   updatedAt        DateTime    @updatedAt
   deletedAt        DateTime?
 
-  organization    Organization? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  uploadedByUser  User?         @relation("MediaUploadedByUser", fields: [uploadedByUserId], references: [id], onDelete: SetNull)
-  primaryAsanas   Asana[]       @relation("AsanaPrimaryMedia")
-  asanaMediaItems AsanaMedia[]
+  organization        Organization?  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  uploadedByUser      User?          @relation("MediaUploadedByUser", fields: [uploadedByUserId], references: [id], onDelete: SetNull)
+  primaryAsanas       Asana[]        @relation("AsanaPrimaryMedia")
+  asanaMediaItems     AsanaMedia[]
+  stepVoiceAudios     SequenceStep[] @relation("StepVoiceAudio")
+  stepDemoVideos      SequenceStep[] @relation("StepDemoVideo")
+  stepReferenceImages SequenceStep[] @relation("StepReferenceImage")
 
   @@index([tenantId, mediaType, isArchived])
   @@index([tenantId, createdAt])
@@ -1251,4 +1261,112 @@ model AsanaMedia {
 
   @@unique([asanaId, mediaAssetId])
   @@index([asanaId, sortOrder])
+}
+
+enum SequenceLevel {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+  ALL_LEVELS
+}
+
+enum SequenceStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum ExecutionMode {
+  TIME_HOLD
+  BREATH_COUNT
+  REPETITION
+}
+
+enum StepSide {
+  NONE
+  RIGHT
+  LEFT
+}
+
+model Sequence {
+  id                         String         @id @default(uuid())
+  tenantId                   String
+  creatorUserId              String
+  title                      String
+  description                String?
+  objective                  String?
+  targetLevel                SequenceLevel  @default(ALL_LEVELS)
+  intendedAudience           String?
+  isStudioTemplate           Boolean        @default(false)
+  tags                       String[]       @default([])
+  status                     SequenceStatus @default(DRAFT)
+  activeVersion              Int            @default(1)
+  estimatedTotalDurationSecs Int            @default(0)
+  createdAt                  DateTime       @default(now())
+  updatedAt                  DateTime       @updatedAt
+  deletedAt                  DateTime?
+
+  organization Organization      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  creatorUser  User              @relation("SequencesCreatedByUser", fields: [creatorUserId], references: [id], onDelete: Restrict)
+  versions     SequenceVersion[]
+
+  @@index([tenantId, status])
+  @@index([tenantId, title])
+}
+
+model SequenceVersion {
+  id                         String         @id @default(uuid())
+  tenantId                   String
+  sequenceId                 String
+  versionNumber              Int
+  status                     SequenceStatus @default(DRAFT)
+  totalEstimatedDurationSecs Int            @default(0)
+  mediaManifest              Json?
+  notes                      String?
+  publishedAt                DateTime?
+  createdAt                  DateTime       @default(now())
+  updatedAt                  DateTime       @updatedAt
+
+  organization     Organization           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  sequence         Sequence               @relation(fields: [sequenceId], references: [id], onDelete: Cascade)
+  steps            SequenceStep[]
+  attachedSessions ClassSessionInstance[]
+
+  @@unique([tenantId, sequenceId, versionNumber])
+  @@index([sequenceId, versionNumber])
+  @@index([tenantId, status])
+}
+
+model SequenceStep {
+  id                    String        @id @default(uuid())
+  tenantId              String
+  sequenceVersionId     String
+  stepOrder             Int
+  asanaId               String
+  asanaNameSnapshot     String?
+  sanskritNameSnapshot  String?
+  executionMode         ExecutionMode @default(TIME_HOLD)
+  durationSeconds       Int           @default(30)
+  repetitionCount       Int?
+  isBilateral           Boolean       @default(false)
+  side                  StepSide      @default(NONE)
+  restIntervalSeconds   Int           @default(0)
+  voiceAudioMediaId     String?
+  demoVideoMediaId      String?
+  referenceImageMediaId String?
+  teacherNotes          String?
+  cues                  String?
+  transitionNotes       String?
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+
+  organization        Organization    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  sequenceVersion     SequenceVersion @relation(fields: [sequenceVersionId], references: [id], onDelete: Cascade)
+  asana               Asana           @relation(fields: [asanaId], references: [id], onDelete: Restrict)
+  voiceAudioMedia     MediaAsset?     @relation("StepVoiceAudio", fields: [voiceAudioMediaId], references: [id], onDelete: SetNull)
+  demoVideoMedia      MediaAsset?     @relation("StepDemoVideo", fields: [demoVideoMediaId], references: [id], onDelete: SetNull)
+  referenceImageMedia MediaAsset?     @relation("StepReferenceImage", fields: [referenceImageMediaId], references: [id], onDelete: SetNull)
+
+  @@unique([tenantId, sequenceVersionId, stepOrder])
+  @@index([sequenceVersionId, stepOrder])
 }

@@ -45,6 +45,9 @@ export function NavHeader() {
               <Link href="/asana-library" className="text-stone-700 hover:text-emerald-700">
                 Asanas
               </Link>
+              <Link href="/sequences" className="text-stone-700 hover:text-emerald-700">
+                Sequences
+              </Link>
               <Link href="/media-library" className="text-stone-700 hover:text-emerald-700">
                 Media
               </Link>

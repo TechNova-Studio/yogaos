@@ -1,17 +1,17 @@
 # YogaOS — Implementation Status & Milestone Tracker
 
 **Document Reference:** `docs/engineering/IMPLEMENTATION_STATUS.md`  
-**Version:** 1.8.0 (Phase P14 Asana Library & Media Management Complete)  
-**Current Engineering Phase:** Phase 6 In Progress (P14 Complete) — Ready for P15 (Sequence Builder)  
+**Version:** 1.9.0 (Phase P15 Instructor Sequence Builder Complete)  
+**Current Engineering Phase:** Phase 6 Complete (P14 & P15 Built) — Ready for Phase 7 (P16 Offline Conductor)  
 
 ---
 
 ## 1. Executive Implementation Dashboard
 
 ```
-Overall Progress: [██████████████░░░░░░] 70.0% Complete (Phase 6 Asana & Media Engine Built)
-Phases Completed: 5 / 8
-Quality Gates Passed: 5 / 6 (Gate 1 Foundation, Gate 2 Multi-Tenant, Gate 3 Operations, Gate 4 Billing & Tax Engine, Gate 5 Asana Library Foundation)
+Overall Progress: [███████████████░░░░░] 75.0% Complete (Phase 6 Asana & Sequence Engine Built)
+Phases Completed: 6 / 8
+Quality Gates Passed: 5 / 6 (Gate 1 Foundation, Gate 2 Multi-Tenant, Gate 3 Operations, Gate 4 Billing & Tax Engine, Gate 5 Asana & Sequence Builder Engine)
 ```
 
 | Phase | Phase Name | Planned Prompts | Status | Quality Gate Status |
@@ -21,7 +21,7 @@ Quality Gates Passed: 5 / 6 (Gate 1 Foundation, Gate 2 Multi-Tenant, Gate 3 Oper
 | **Phase 3** | Studio Core: Branches, Staff & Student Privacy | Prompts 6–7 | **COMPLETED (P08)** | **Gate 3: PASSED** |
 | **Phase 4** | Classes, Schedules, Bookings & Attendance | Prompts 8–10 | **COMPLETED (P09, P10)**| **Gate 3: PASSED** |
 | **Phase 5** | Memberships, Passes, Billing & Configurable GST | Prompts 11–13 | **COMPLETED (P11, P12, P13)** | **Gate 4: PASSED** |
-| **Phase 6** | Asana Library & Versioned Sequence Builder | Prompts 14–15 | **IN PROGRESS (P14 Done)** | Gate 5: In Progress |
+| **Phase 6** | Asana Library & Versioned Sequence Builder | Prompts 14–15 | **COMPLETED (P14, P15)** | **Gate 5: PASSED** |
 | **Phase 7** | Offline-First Automated Class Conductor | Prompts 16–18 | PENDING | Gate 5: Pending |
 | **Phase 8** | Operational Dashboard, E2E Verification & Release | Prompts 19–20 | PENDING | Gate 6: Pending |
 
@@ -111,7 +111,7 @@ Quality Gates Passed: 5 / 6 (Gate 1 Foundation, Gate 2 Multi-Tenant, Gate 3 Oper
   - [x] Background worker daemon integration for recurring renewal checks and queued reminder dispatching.
   - [x] Full UI workflows: Billing operations, daily collections reconciliation, renewals, reminders, gateway configuration, and discrepancies dashboard (`/billing`), tax invoices directory (`/billing/invoices`), printable GST tax invoice view (`/billing/invoices/[id]`), and student detail billing history tab.
   - [x] Automated tests verified: 152 total (126 real PostgreSQL database integration tests + 26 unit tests).
-* **Gate 5: Asana Library & Media Management** — Status: **PASSED (Certified in P14)**
+* **Gate 5: Asana Library & Instructor Sequence Builder** — Status: **PASSED (Certified in P14 & P15)**
   - [x] Tenant-aware Yoga Asana catalog supporting Sanskrit names (Devanagari script & IAST transliteration), English names, common/vernacular names, descriptions, and step-by-step instructions.
   - [x] Structured taxonomy: categories (`STANDING`, `SEATED`, `PRONE`, `SUPINE`, `INVERSION`, `BACKBEND`, `FORWARD_BEND`, `TWIST`, `ARM_BALANCE`, `RESTORATIVE`, `PRANAYAMA`, `MEDITATION`), difficulty levels (`BEGINNER`, `INTERMEDIATE`, `ADVANCED`), and lifecycle states (`DRAFT`, `PUBLISHED`, `ARCHIVED`).
   - [x] Comprehensive anatomical and safety metadata: anatomical focus array, therapeutic benefits, contraindications, cautions & disclaimers, prep poses, follow-up poses, variations, and searchable tags.
@@ -123,11 +123,21 @@ Quality Gates Passed: 5 / 6 (Gate 1 Foundation, Gate 2 Multi-Tenant, Gate 3 Oper
   - [x] Non-destructive file replacement and soft-archival without breaking historical posture references.
   - [x] Multi-media posture binding (`AsanaMedia`) supporting ordered attachments, featured media flags, and teacher captions.
   - [x] Cross-tenant media protection: tenants are strictly forbidden from associating another studio's media assets with their postures.
+  - [x] Sequence creation and lifecycle management (`Sequence`, `SequenceVersion`, `SequenceStep`) with status transitions (`DRAFT`, `PUBLISHED`, `ARCHIVED`).
+  - [x] Step-based sequence composition: execution modes (`TIME_HOLD`, `BREATH_COUNT`, `REPETITION`), duration, bilateral symmetry holds (symmetrical hold doubling), rest intervals, and teacher notes/cues.
+  - [x] Historical snapshot preservation: steps capture `asanaNameSnapshot` and `sanskritNameSnapshot` protecting class execution logs from library changes.
+  - [x] Immutability and version forking: editing a `PUBLISHED` sequence automatically forks into a new `DRAFT` version (`v2.0`), keeping historical version snapshots permanently intact.
+  - [x] Sequence duplication workflow: deep-cloning posture steps into a new draft sequence.
+  - [x] Collision-free transactional step reordering avoiding unique constraint collisions.
+  - [x] Offline media manifest generation: publishing compiles an asset manifest (`assetId`, `url`, `sha256Hash`, `fileSize`) for Conductor offline caching.
   - [x] Responsive web interface:
     - `/asana-library`: Posture catalog with dual Sanskrit/English display, category/difficulty/scope filters, text search, and custom posture modal.
     - `/asana-library/[id]`: Detailed posture view with alignment cues, step-by-step instructions, contraindications disclaimer, and instructional media players (accessible HTML5 video/audio controls with NO autoplay).
     - `/media-library`: Media directory with filterable grid, media viewer/player modal, and safe registration workflow.
-  - [x] Automated tests verified: 178 total (139 real PostgreSQL database integration tests + 39 unit tests).
+    - `/sequences`: Sequence directory with level/status filters, search, and duplicate controls.
+    - `/sequences/new`: Interactive sequence builder with step reordering, bilateral toggling, media attachment, and real-time runtime calculator.
+    - `/sequences/[id]`: Detailed class sequence preview with ordered progression timeline and accessible media demonstration players.
+  - [x] Automated tests verified: 198 total (150 real PostgreSQL database integration tests + 48 unit tests).
 * **Gate 6: Conductor Offline Resilience & Release Readiness** — Status: **PENDING (Phase 7 & 8)**
 
 ---
