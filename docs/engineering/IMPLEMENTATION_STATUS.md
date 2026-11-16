@@ -1,16 +1,16 @@
 # YogaOS — Implementation Status & Milestone Tracker
 
 **Document Reference:** `docs/engineering/IMPLEMENTATION_STATUS.md`  
-**Version:** 1.3.0 (Phase P08 Studio, Branch, Room & Student Management Complete)  
-**Current Engineering Phase:** Phase 3 Complete — Ready for Phase 4  
+**Version:** 1.4.0 (Phase P09 Class Types, Batches, Scheduling & Conflict Prevention Complete)  
+**Current Engineering Phase:** Phase 4 (P09 Complete — Batches, Scheduling & Conflict Prevention Operational)  
 
 ---
 
 ## 1. Executive Implementation Dashboard
 
 ```
-Overall Progress: [██████░░░░░░░░░░░░░░] 37.5% Complete (Phase 3 Studio, Student & Leads Built)
-Phases Completed: 3 / 8
+Overall Progress: [███████░░░░░░░░░░░░░] 45.0% Complete (Phase 4 Classes, Batches & Scheduling Built)
+Phases Completed: 3.5 / 8
 Quality Gates Passed: 3 / 6 (Gate 1 Foundation, Gate 2 Multi-Tenant, Gate 3 Operations & Privacy)
 ```
 
@@ -19,7 +19,7 @@ Quality Gates Passed: 3 / 6 (Gate 1 Foundation, Gate 2 Multi-Tenant, Gate 3 Oper
 | **Phase 1** | Foundation, Monorepo & Core Packages | Prompts 1–3 | **COMPLETED (P06)** | **Gate 1: PASSED** |
 | **Phase 2** | Global Identity, Auth & Multi-Tenancy | Prompts 4–5 | **COMPLETED (P07)** | **Gate 2: PASSED** |
 | **Phase 3** | Studio Core: Branches, Staff & Student Privacy | Prompts 6–7 | **COMPLETED (P08)** | **Gate 3: PASSED** |
-| **Phase 4** | Classes, Schedules, Bookings & Attendance | Prompts 8–10 | **READY (NEXT)** | Gate 3: Pending |
+| **Phase 4** | Classes, Schedules, Bookings & Attendance | Prompts 8–10 | **IN PROGRESS (P09 Complete)** | Gate 3: In Progress |
 | **Phase 5** | Memberships, Passes, Billing & Configurable GST | Prompts 11–13 | PENDING | Gate 4: Pending |
 | **Phase 6** | Asana Library & Versioned Sequence Builder | Prompts 14–15 | PENDING | Gate 4: Pending |
 | **Phase 7** | Offline-First Automated Class Conductor | Prompts 16–18 | PENDING | Gate 5: Pending |
@@ -63,7 +63,7 @@ Quality Gates Passed: 3 / 6 (Gate 1 Foundation, Gate 2 Multi-Tenant, Gate 3 Oper
   - [x] Structured audit logging (`AuditLog` Prisma model & `AuditService`).
   - [x] Web frontend authentication, studio switcher dropdown, and protected routing.
   - [x] Automated unit and tenant isolation test suites verified (18/18 passing).
-* **Gate 3: Core Operations & Health Privacy** — Status: **PASSED (Certified in P08)**
+* **Gate 3: Core Operations & Health Privacy** — Status: **PASSED (Certified in P08 & P09)**
   - [x] Studio profile & settings management (legal entity, GSTIN, PAN, timezone, currency).
   - [x] Branch creation, updating, and soft deletion with GST 2-digit state code validation.
   - [x] Room management with strict capacity validation (min 1) and cross-tenant branch validation.
@@ -75,8 +75,14 @@ Quality Gates Passed: 3 / 6 (Gate 1 Foundation, Gate 2 Multi-Tenant, Gate 3 Oper
   - [x] Lead & enquiry pipeline tracking (NEW, CONTACTED, TRIAL_BOOKED, CONVERTED, LOST).
   - [x] Transactional lead-to-student conversion preventing duplicate student profiles.
   - [x] Student activity timeline foundation (`StudentActivity`) with staff notes.
-  - [x] Responsive Next.js web portal screens for Studio Settings, Branches, Rooms, Students, and Leads.
-  - [x] Automated tests verified: 41 total (23 real PostgreSQL database tests + 18 unit tests).
+  - [x] Class Types & Programs (tenant-scoped, level, duration, capacity, search/filter).
+  - [x] Batches & Class Groups (recurring weekly, fixed series, automatic 30-day session generation, room capacity validation).
+  - [x] Deterministic session instances with IANA timezone boundaries (`parseLocalTimeToUtc`, `getUtcSessionDate`).
+  - [x] Overlapping room conflict prevention within the studio.
+  - [x] Cross-studio instructor conflict prevention across any studio affiliations without leaking external studio data.
+  - [x] Individual session instance cancellation and substitution without mutating master recurrence rule series.
+  - [x] Interactive calendar schedule (`/classes/schedule`), class & batch catalog (`/classes`), and batch detail (`/classes/batches/[id]`).
+  - [x] Automated tests verified: 56 total (38 real PostgreSQL database integration tests + 18 unit tests).
 * **Gate 4: Commercial & Billing Accuracy** — Status: **PENDING (Phase 5)**
 * **Gate 5: Conductor Offline Resilience** — Status: **PENDING (Phase 7)**
 * **Gate 6: Production Release Readiness** — Status: **PENDING (Phase 8)**

@@ -51,6 +51,33 @@ enum LeadSource {
   OTHER
 }
 
+enum ClassLevel {
+  ALL_LEVELS
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+}
+
+enum BatchScheduleType {
+  RECURRING_WEEKLY
+  FIXED_WORKSHOP
+}
+
+enum BatchStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  COMPLETED
+  ARCHIVED
+}
+
+enum SessionStatus {
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
 model User {
   id               String                 @id @default(uuid())
   email            String                 @unique
@@ -71,6 +98,9 @@ model User {
   auditLogs        AuditLog[]
   healthDisclaimersUpdated StudentHealthDisclaimer[]
   studentActivities StudentActivity[]
+  instructorBatches ClassBatch[]            @relation("InstructorBatches")
+  instructorSessions ClassSessionInstance[] @relation("InstructorSessions")
+  instructorProfiles InstructorProfile[]
 
   @@index([email])
   @@index([phone])
@@ -144,6 +174,10 @@ model Organization {
   rooms            Room[]
   students         Student[]
   leads            Lead[]
+  classTypes       ClassType[]
+  batches          ClassBatch[]
+  sessions         ClassSessionInstance[]
+  instructorProfiles InstructorProfile[]
 
   @@index([slug])
 }
@@ -234,6 +268,8 @@ model Branch {
   rooms           Room[]
   students        Student[]
   leads           Lead[]
+  batches         ClassBatch[]
+  sessions        ClassSessionInstance[]
 
   @@unique([tenantId, slug])
   @@index([tenantId, stateCode])
@@ -253,6 +289,8 @@ model Room {
 
   organization    Organization  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   branch          Branch        @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  batches         ClassBatch[]
+  sessions        ClassSessionInstance[]
 
   @@index([tenantId, branchId])
   @@index([tenantId, isActive])
@@ -369,4 +407,116 @@ model Lead {
   @@index([tenantId, status])
   @@index([tenantId, phone])
   @@index([tenantId, followUpDate])
+}
+
+model ClassType {
+  id                   String        @id @default(uuid())
+  tenantId             String
+  name                 String
+  description          String?
+  category             String        @default("Hatha")
+  level                ClassLevel    @default(ALL_LEVELS)
+  defaultDurationMins  Int           @default(60)
+  defaultCapacity      Int           @default(20)
+  intensity            String?
+  isActive             Boolean       @default(true)
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+  deletedAt            DateTime?
+
+  organization         Organization  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  batches              ClassBatch[]
+  sessions             ClassSessionInstance[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId, isActive])
+  @@index([tenantId, category])
+}
+
+model InstructorProfile {
+  id              String        @id @default(uuid())
+  tenantId        String
+  userId          String
+  displayName     String
+  bio             String?
+  certifications  String[]      @default([])
+  teachingStyles  String[]      @default([])
+  hourlyRate      Decimal?      @db.Decimal(10, 2)
+  isActive        Boolean       @default(true)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  organization    Organization  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, userId])
+  @@index([tenantId, userId])
+}
+
+model ClassBatch {
+  id                   String             @id @default(uuid())
+  tenantId             String
+  classTypeId          String
+  branchId             String
+  roomId               String
+  instructorId         String
+  name                 String
+  description          String?
+  scheduleType         BatchScheduleType  @default(RECURRING_WEEKLY)
+  status               BatchStatus        @default(DRAFT)
+  startDate            DateTime
+  endDate              DateTime?
+  capacity             Int
+  sessionDurationMins  Int                @default(60)
+  daysOfWeek           Int[]
+  startTime            String
+  endTime              String
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+  deletedAt            DateTime?
+
+  organization         Organization       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  classType            ClassType          @relation(fields: [classTypeId], references: [id], onDelete: Restrict)
+  branch               Branch             @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  room                 Room               @relation(fields: [roomId], references: [id], onDelete: Restrict)
+  instructor           User               @relation("InstructorBatches", fields: [instructorId], references: [id], onDelete: Restrict)
+  sessions             ClassSessionInstance[]
+
+  @@index([tenantId, status])
+  @@index([tenantId, branchId])
+  @@index([tenantId, roomId])
+  @@index([tenantId, instructorId])
+}
+
+model ClassSessionInstance {
+  id                   String        @id @default(uuid())
+  tenantId             String
+  batchId              String?
+  classTypeId          String
+  branchId             String
+  roomId               String
+  instructorId         String
+  sessionDate          DateTime
+  startTimestamp       DateTime
+  endTimestamp         DateTime
+  capacity             Int
+  status               SessionStatus @default(SCHEDULED)
+  cancellationReason   String?
+  notes                String?
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+
+  organization         Organization  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  batch                ClassBatch?   @relation(fields: [batchId], references: [id], onDelete: SetNull)
+  classType            ClassType     @relation(fields: [classTypeId], references: [id], onDelete: Restrict)
+  branch               Branch        @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  room                 Room          @relation(fields: [roomId], references: [id], onDelete: Restrict)
+  instructor           User          @relation("InstructorSessions", fields: [instructorId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, sessionDate])
+  @@index([tenantId, startTimestamp])
+  @@index([tenantId, status])
+  @@index([roomId, startTimestamp, endTimestamp])
+  @@index([instructorId, startTimestamp, endTimestamp])
+  @@index([batchId])
 }

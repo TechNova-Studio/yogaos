@@ -30,6 +30,19 @@ import {
   LeadDetails,
   ConvertLeadRequest,
   LeadListQuery,
+  CreateClassTypeRequest,
+  UpdateClassTypeRequest,
+  ClassTypeDetails,
+  ClassTypeListQuery,
+  CreateBatchRequest,
+  UpdateBatchRequest,
+  BatchDetails,
+  BatchListQuery,
+  SessionDetails,
+  UpdateSessionInstanceRequest,
+  CancelSessionInstanceRequest,
+  SessionCalendarQuery,
+  InstructorSummary,
 } from '@yogaos/contracts';
 
 export interface ApiClientOptions {
@@ -308,6 +321,128 @@ export class ApiClient {
       method: 'POST',
       body: JSON.stringify(data),
     });
+  }
+
+  // --------------------------------------------------------------------------
+  // Class Types / Programs
+  // --------------------------------------------------------------------------
+  async getClassTypes(query?: ClassTypeListQuery): Promise<{ classTypes: ClassTypeDetails[]; total: number; page: number; limit: number }> {
+    const params = new URLSearchParams();
+    if (query?.search) params.set('search', query.search);
+    if (query?.category) params.set('category', query.category);
+    if (query?.level) params.set('level', query.level);
+    if (query?.isActive !== undefined) params.set('isActive', String(query.isActive));
+    if (query?.page) params.set('page', String(query.page));
+    if (query?.limit) params.set('limit', String(query.limit));
+    const qs = params.toString() ? `?${params.toString()}` : '';
+    return this.request(`/classes/types${qs}`);
+  }
+
+  async getClassType(id: string): Promise<ClassTypeDetails> {
+    return this.request<ClassTypeDetails>(`/classes/types/${id}`);
+  }
+
+  async createClassType(data: CreateClassTypeRequest): Promise<ClassTypeDetails> {
+    return this.request<ClassTypeDetails>('/classes/types', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateClassType(id: string, data: UpdateClassTypeRequest): Promise<ClassTypeDetails> {
+    return this.request<ClassTypeDetails>(`/classes/types/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async archiveClassType(id: string): Promise<void> {
+    return this.request<void>(`/classes/types/${id}`, { method: 'DELETE' });
+  }
+
+  // --------------------------------------------------------------------------
+  // Batches & Class Groups
+  // --------------------------------------------------------------------------
+  async getBatches(query?: BatchListQuery): Promise<{ batches: BatchDetails[]; total: number; page: number; limit: number }> {
+    const params = new URLSearchParams();
+    if (query?.search) params.set('search', query.search);
+    if (query?.branchId) params.set('branchId', query.branchId);
+    if (query?.classTypeId) params.set('classTypeId', query.classTypeId);
+    if (query?.instructorId) params.set('instructorId', query.instructorId);
+    if (query?.status) params.set('status', query.status);
+    if (query?.page) params.set('page', String(query.page));
+    if (query?.limit) params.set('limit', String(query.limit));
+    const qs = params.toString() ? `?${params.toString()}` : '';
+    return this.request(`/classes/batches${qs}`);
+  }
+
+  async getBatch(id: string): Promise<BatchDetails> {
+    return this.request<BatchDetails>(`/classes/batches/${id}`);
+  }
+
+  async createBatch(data: CreateBatchRequest): Promise<BatchDetails> {
+    return this.request<BatchDetails>('/classes/batches', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateBatch(id: string, data: UpdateBatchRequest): Promise<BatchDetails> {
+    return this.request<BatchDetails>(`/classes/batches/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async archiveBatch(id: string): Promise<void> {
+    return this.request<void>(`/classes/batches/${id}`, { method: 'DELETE' });
+  }
+
+  async generateBatchSessions(batchId: string, upToDate: string): Promise<{ generatedCount: number; message: string }> {
+    return this.request<{ generatedCount: number; message: string }>(`/classes/batches/${batchId}/generate-sessions`, {
+      method: 'POST',
+      body: JSON.stringify({ upToDate }),
+    });
+  }
+
+  // --------------------------------------------------------------------------
+  // Scheduling & Calendar Sessions
+  // --------------------------------------------------------------------------
+  async getSessions(query: SessionCalendarQuery): Promise<SessionDetails[]> {
+    const params = new URLSearchParams();
+    params.set('startDate', query.startDate);
+    params.set('endDate', query.endDate);
+    if (query.branchId) params.set('branchId', query.branchId);
+    if (query.roomId) params.set('roomId', query.roomId);
+    if (query.instructorId) params.set('instructorId', query.instructorId);
+    if (query.classTypeId) params.set('classTypeId', query.classTypeId);
+    if (query.status) params.set('status', query.status);
+    return this.request<SessionDetails[]>(`/classes/sessions?${params.toString()}`);
+  }
+
+  async getSession(id: string): Promise<SessionDetails> {
+    return this.request<SessionDetails>(`/classes/sessions/${id}`);
+  }
+
+  async updateSession(id: string, data: UpdateSessionInstanceRequest): Promise<SessionDetails> {
+    return this.request<SessionDetails>(`/classes/sessions/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async cancelSession(id: string, data: CancelSessionInstanceRequest): Promise<SessionDetails> {
+    return this.request<SessionDetails>(`/classes/sessions/${id}/cancel`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  // --------------------------------------------------------------------------
+  // Instructors Lookup
+  // --------------------------------------------------------------------------
+  async getInstructors(): Promise<InstructorSummary[]> {
+    return this.request<InstructorSummary[]>('/classes/sessions/instructors');
   }
 }
 

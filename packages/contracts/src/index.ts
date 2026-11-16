@@ -5,3 +5,4 @@ export * from './organization.js';
 export * from './studio.js';
 export * from './student.js';
 export * from './lead.js';
+export * from './class.js';

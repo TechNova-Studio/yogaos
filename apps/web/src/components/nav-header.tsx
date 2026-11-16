@@ -27,6 +27,12 @@ export function NavHeader() {
               <Link href="/dashboard" className="text-stone-700 hover:text-emerald-700">
                 Dashboard
               </Link>
+              <Link href="/classes" className="text-stone-700 hover:text-emerald-700">
+                Classes & Batches
+              </Link>
+              <Link href="/classes/schedule" className="text-stone-700 hover:text-emerald-700">
+                Schedule
+              </Link>
               <Link href="/students" className="text-stone-700 hover:text-emerald-700">
                 Students
               </Link>
