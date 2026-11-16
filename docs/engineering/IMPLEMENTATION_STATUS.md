@@ -1,15 +1,15 @@
 # YogaOS — Implementation Status & Milestone Tracker
 
 **Document Reference:** `docs/engineering/IMPLEMENTATION_STATUS.md`  
-**Version:** 1.6.0 (Phase P11 Membership Plans, Student Memberships & Passes Complete)  
-**Current Engineering Phase:** Phase 5 In Progress (P11 Complete) — Ready for P12 (Invoicing & Payments)  
+**Version:** 1.7.0 (Phase P12 Billing, Payments, Invoices, GST & Refunds Complete)  
+**Current Engineering Phase:** Phase 5 In Progress (P11 & P12 Complete) — Ready for P13 (Asana Library & Sequence Builder)  
 
 ---
 
 ## 1. Executive Implementation Dashboard
 
 ```
-Overall Progress: [█████████░░░░░░░░░░░] 55.0% Complete (Phase 5 Memberships & Passes Built)
+Overall Progress: [██████████░░░░░░░░░░] 60.0% Complete (Phase 5 Billing & Tax Engine Built)
 Phases Completed: 4 / 8
 Quality Gates Passed: 4 / 6 (Gate 1 Foundation, Gate 2 Multi-Tenant, Gate 3 Operations, Privacy & Scheduling)
 ```
@@ -20,7 +20,7 @@ Quality Gates Passed: 4 / 6 (Gate 1 Foundation, Gate 2 Multi-Tenant, Gate 3 Oper
 | **Phase 2** | Global Identity, Auth & Multi-Tenancy | Prompts 4–5 | **COMPLETED (P07)** | **Gate 2: PASSED** |
 | **Phase 3** | Studio Core: Branches, Staff & Student Privacy | Prompts 6–7 | **COMPLETED (P08)** | **Gate 3: PASSED** |
 | **Phase 4** | Classes, Schedules, Bookings & Attendance | Prompts 8–10 | **COMPLETED (P09, P10)**| **Gate 3: PASSED** |
-| **Phase 5** | Memberships, Passes, Billing & Configurable GST | Prompts 11–13 | **IN PROGRESS (P11 Done)** | Gate 4: In Progress |
+| **Phase 5** | Memberships, Passes, Billing & Configurable GST | Prompts 11–13 | **IN PROGRESS (P11 & P12 Done)** | Gate 4: In Progress |
 | **Phase 6** | Asana Library & Versioned Sequence Builder | Prompts 14–15 | PENDING | Gate 4: Pending |
 | **Phase 7** | Offline-First Automated Class Conductor | Prompts 16–18 | PENDING | Gate 5: Pending |
 | **Phase 8** | Operational Dashboard, E2E Verification & Release | Prompts 19–20 | PENDING | Gate 6: Pending |
@@ -88,7 +88,7 @@ Quality Gates Passed: 4 / 6 (Gate 1 Foundation, Gate 2 Multi-Tenant, Gate 3 Oper
   - [x] Attendance states (`ATTENDED`, `NO_SHOW`, `LATE_CANCEL`, `BOOKED`) and audit trail for staff corrections.
   - [x] Studio-wide booking management directory (`/bookings`) and student booking history tab.
   - [x] Automated tests verified: 82 total (74 real PostgreSQL database integration tests + 8 pure unit tests).
-* **Gate 4: Commercial, Entitlements & Billing Accuracy** — Status: **IN PROGRESS (P11 Completed)**
+* **Gate 4: Commercial, Entitlements & Billing Accuracy** — Status: **IN PROGRESS (P11 & P12 Completed)**
   - [x] Tenant-scoped membership plans (`TIME_UNLIMITED`, `CLASS_PACK`, `SINGLE_DROP_IN`) with pricing, validity, GST rate, SAC code, freeze limits, and multi-branch configuration.
   - [x] Student membership assignment with historical snapshot preservation (`planNameSnapshot`, `priceSnapshot`, `planTypeSnapshot`, `isMultiBranchSnapshot`).
   - [x] Double-entry entitlement credit ledger (`MembershipCreditLedger`) tracking `INITIAL_ALLOCATION`, `REDEMPTION`, `REFUND_RESTORE`, `MANUAL_ADJUSTMENT`, and `EXPIRATION`.
@@ -97,8 +97,14 @@ Quality Gates Passed: 4 / 6 (Gate 1 Foundation, Gate 2 Multi-Tenant, Gate 3 Oper
   - [x] Concurrency-safe credit deduction on check-in (`ATTENDED`) and automatic credit restoration on booking cancellation.
   - [x] Overspend prevention under zero credit balance (rejected with 400).
   - [x] Multi-branch vs home-branch restriction enforcement.
-  - [x] Full UI workflows: Plans catalog & editor (`/memberships/plans`), student membership card with freeze/unfreeze and balance, entitlement ledger modal, manual credit adjustments, and navigation links.
-  - [x] Automated tests verified: 108 total (94 real PostgreSQL database integration tests + 14 unit tests).
+  - [x] Multi-mode revenue recording (`CASH`, `UPI`, `CARD`, `BANK_TRANSFER`, `ONLINE`) with lifecycle states (`PENDING`, `COMPLETED`, `FAILED`, `REFUNDED`, `PARTIALLY_REFUNDED`), idempotency keys, and receipt numbering (`REC/YYYY-YY/XXXXX`).
+  - [x] Configurable Indian GST & tax engine per studio (GSTIN, legal entity, PAN, state code, default tax rate, default SAC `9992`).
+  - [x] Place-of-supply tax calculations: Intra-state (50% CGST + 50% SGST), Inter-state (100% IGST), Unregistered studios (0% tax), and non-floating-point arithmetic precision.
+  - [x] Sequential tax invoice generation (`INV/YYYY-YY/XXXXX`), financial year resets, line items with SAC codes, customer/supplier snapshots, and balance due tracking.
+  - [x] Financial audit trails: unpaid invoice voiding with audit log; immutability of paid invoices.
+  - [x] Refund & adjustments engine: refund records (`REF/YYYY-YY/XXXXX`), credit notes (`CN/YYYY-YY/XXXXX`), balance due reduction, idempotency, and transactional membership credit restoration.
+  - [x] Full UI workflows: Billing operations & daily collections reconciliation dashboard (`/billing`), tax invoices directory (`/billing/invoices`), printable GST tax invoice view (`/billing/invoices/[id]`), and student detail billing & payment history tab (`/students/[id]`).
+  - [x] Automated tests verified: 132 total (113 real PostgreSQL database integration tests + 19 unit tests).
 * **Gate 5: Conductor Offline Resilience** — Status: **PENDING (Phase 7)**
 * **Gate 6: Production Release Readiness** — Status: **PENDING (Phase 8)**
 

@@ -66,6 +66,19 @@ import {
   CreditLedgerListQuery,
   CheckBookingEligibilityQuery,
   MembershipEligibilityResult,
+  OrganizationTaxSettings,
+  UpdateOrganizationTaxSettingsRequest,
+  CreateInvoiceRequest,
+  TaxInvoiceDetails,
+  InvoiceListQuery,
+  RecordPaymentRequest,
+  PaymentTransactionDetails,
+  PaymentListQuery,
+  ProcessRefundRequest,
+  RefundRecordDetails,
+  RefundListQuery,
+  CreditNoteDetails,
+  DailyCollectionSummary,
 } from '@yogaos/contracts';
 
 export interface ApiClientOptions {
@@ -630,6 +643,103 @@ export class ApiClient {
 
   async checkStudentEligibility(studentId: string, sessionInstanceId: string): Promise<MembershipEligibilityResult> {
     return this.request<MembershipEligibilityResult>(`/memberships/eligibility?studentId=${studentId}&sessionInstanceId=${sessionInstanceId}`);
+  }
+
+  // Billing, Invoicing & GST
+  async getTaxSettings(): Promise<OrganizationTaxSettings> {
+    return this.request<OrganizationTaxSettings>('/billing/settings/tax');
+  }
+
+  async updateTaxSettings(data: UpdateOrganizationTaxSettingsRequest): Promise<OrganizationTaxSettings> {
+    return this.request<OrganizationTaxSettings>('/billing/settings/tax', {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async createInvoice(data: CreateInvoiceRequest): Promise<TaxInvoiceDetails> {
+    return this.request<TaxInvoiceDetails>('/billing/invoices', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getInvoices(query?: InvoiceListQuery): Promise<TaxInvoiceDetails[]> {
+    const params = new URLSearchParams();
+    if (query?.studentId) params.append('studentId', query.studentId);
+    if (query?.status) params.append('status', query.status);
+    if (query?.startDate) params.append('startDate', query.startDate);
+    if (query?.endDate) params.append('endDate', query.endDate);
+    if (query?.search) params.append('search', query.search);
+    if (query?.page) params.append('page', String(query.page));
+    if (query?.limit) params.append('limit', String(query.limit));
+    const qs = params.toString() ? `?${params.toString()}` : '';
+    return this.request<TaxInvoiceDetails[]>(`/billing/invoices${qs}`);
+  }
+
+  async getInvoice(id: string): Promise<TaxInvoiceDetails> {
+    return this.request<TaxInvoiceDetails>(`/billing/invoices/${id}`);
+  }
+
+  async voidInvoice(id: string, reason: string): Promise<TaxInvoiceDetails> {
+    return this.request<TaxInvoiceDetails>(`/billing/invoices/${id}/void`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    });
+  }
+
+  async recordPayment(data: RecordPaymentRequest): Promise<PaymentTransactionDetails> {
+    return this.request<PaymentTransactionDetails>('/billing/payments', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getPayments(query?: PaymentListQuery): Promise<PaymentTransactionDetails[]> {
+    const params = new URLSearchParams();
+    if (query?.studentId) params.append('studentId', query.studentId);
+    if (query?.invoiceId) params.append('invoiceId', query.invoiceId);
+    if (query?.paymentMode) params.append('paymentMode', query.paymentMode);
+    if (query?.status) params.append('status', query.status);
+    if (query?.page) params.append('page', String(query.page));
+    if (query?.limit) params.append('limit', String(query.limit));
+    const qs = params.toString() ? `?${params.toString()}` : '';
+    return this.request<PaymentTransactionDetails[]>(`/billing/payments${qs}`);
+  }
+
+  async getPayment(id: string): Promise<PaymentTransactionDetails> {
+    return this.request<PaymentTransactionDetails>(`/billing/payments/${id}`);
+  }
+
+  async getStudentPayments(studentId: string): Promise<PaymentTransactionDetails[]> {
+    return this.request<PaymentTransactionDetails[]>(`/billing/payments/student/${studentId}`);
+  }
+
+  async processRefund(data: ProcessRefundRequest): Promise<RefundRecordDetails> {
+    return this.request<RefundRecordDetails>('/billing/refunds', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getRefunds(query?: RefundListQuery): Promise<RefundRecordDetails[]> {
+    const params = new URLSearchParams();
+    if (query?.studentId) params.append('studentId', query.studentId);
+    if (query?.paymentTransactionId) params.append('paymentTransactionId', query.paymentTransactionId);
+    if (query?.page) params.append('page', String(query.page));
+    if (query?.limit) params.append('limit', String(query.limit));
+    const qs = params.toString() ? `?${params.toString()}` : '';
+    return this.request<RefundRecordDetails[]>(`/billing/refunds${qs}`);
+  }
+
+  async getCreditNotes(invoiceId?: string): Promise<CreditNoteDetails[]> {
+    const qs = invoiceId ? `?invoiceId=${invoiceId}` : '';
+    return this.request<CreditNoteDetails[]>(`/billing/credit-notes${qs}`);
+  }
+
+  async getDailyCollections(date?: string): Promise<DailyCollectionSummary> {
+    const qs = date ? `?date=${date}` : '';
+    return this.request<DailyCollectionSummary>(`/billing/summary/daily${qs}`);
   }
 }
 

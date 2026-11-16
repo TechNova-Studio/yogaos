@@ -142,8 +142,8 @@ export class CreditLedgerService {
     tx: Prisma.TransactionClient,
     tenantId: string,
     studentMembershipId: string,
-    bookingId: string,
-    userId: string,
+    bookingId?: string | null,
+    userId?: string | null,
     reason = 'Booking cancellation credit refund'
   ): Promise<{ remainingCredits: number | null }> {
     const membership = await tx.studentMembership.findFirst({
@@ -171,12 +171,12 @@ export class CreditLedgerService {
         tenantId,
         studentMembershipId,
         studentId: membership.studentId,
-        bookingId,
+        bookingId: bookingId || null,
         entryType: 'REFUND_RESTORE',
         creditsDelta: 1,
         balanceAfter,
         reason,
-        performedByUserId: userId,
+        performedByUserId: userId || null,
       },
     });
 

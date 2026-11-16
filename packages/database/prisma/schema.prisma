@@ -103,6 +103,9 @@ model User {
   instructorProfiles       InstructorProfile[]
   attendanceMarked         AttendanceRecord[]        @relation("AttendanceMarkedByUser")
   creditLedgerActions      MembershipCreditLedger[]  @relation("CreditActionByUser")
+  paymentsRecorded         PaymentTransaction[]      @relation("PaymentsRecordedByUser")
+  refundsProcessed         RefundRecord[]            @relation("RefundsProcessedByUser")
+  creditNotesIssued        CreditNote[]              @relation("CreditNotesIssuedByUser")
 
   @@index([email])
   @@index([phone])
@@ -186,6 +189,10 @@ model Organization {
   membershipPlans         MembershipPlan[]
   studentMemberships      StudentMembership[]
   membershipCreditLedgers MembershipCreditLedger[]
+  invoices                TaxInvoice[]
+  payments                PaymentTransaction[]
+  refunds                 RefundRecord[]
+  creditNotes             CreditNote[]
 
   @@index([slug])
 }
@@ -280,6 +287,8 @@ model Branch {
   sessions           ClassSessionInstance[]
   membershipPlans    MembershipPlan[]
   studentMemberships StudentMembership[]
+  invoices           TaxInvoice[]
+  payments           PaymentTransaction[]
 
   @@unique([tenantId, slug])
   @@index([tenantId, stateCode])
@@ -336,6 +345,9 @@ model Student {
   waitlistEntries     WaitlistEntry[]
   memberships         StudentMembership[]
   creditLedgerEntries MembershipCreditLedger[]
+  invoices            TaxInvoice[]
+  payments            PaymentTransaction[]
+  refunds             RefundRecord[]
 
   @@index([tenantId, mobilePhone])
   @@index([tenantId, email])
@@ -724,6 +736,8 @@ model StudentMembership {
   homeBranch   Branch?                  @relation(fields: [homeBranchId], references: [id], onDelete: SetNull)
   bookings     Booking[]
   creditLedger MembershipCreditLedger[]
+  invoices     TaxInvoice[]
+  payments     PaymentTransaction[]
 
   @@index([tenantId, studentId, status])
   @@index([tenantId, expiryDate])
@@ -752,4 +766,211 @@ model MembershipCreditLedger {
   @@index([tenantId, studentMembershipId, createdAt])
   @@index([tenantId, studentId])
   @@index([bookingId])
+}
+
+// ----------------------------------------------------------------------------
+// P12: Billing, Payments, Invoices & GST
+// ----------------------------------------------------------------------------
+
+enum InvoiceStatus {
+  DRAFT
+  ISSUED
+  PAID
+  PARTIALLY_PAID
+  VOID
+  CREDITED
+}
+
+enum PaymentMode {
+  CASH
+  UPI
+  CARD
+  BANK_TRANSFER
+  ONLINE
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+  PARTIALLY_REFUNDED
+}
+
+enum RefundStatus {
+  PENDING
+  COMPLETED
+  FAILED
+}
+
+enum CreditNoteStatus {
+  ISSUED
+  APPLIED
+  VOID
+}
+
+model TaxInvoice {
+  id                  String        @id @default(uuid())
+  tenantId            String
+  branchId            String?
+  studentId           String
+  studentMembershipId String?
+  invoiceNumber       String
+  fiscalYear          String
+  sequenceNumber      Int
+  status              InvoiceStatus @default(ISSUED)
+  issueDate           DateTime      @default(now())
+  dueDate             DateTime?
+  currency            String        @default("INR")
+  subtotal            Decimal       @db.Decimal(10, 2)
+  discountAmount      Decimal       @default(0.00) @db.Decimal(10, 2)
+  taxableAmount       Decimal       @db.Decimal(10, 2)
+  cgstAmount          Decimal       @default(0.00) @db.Decimal(10, 2)
+  sgstAmount          Decimal       @default(0.00) @db.Decimal(10, 2)
+  igstAmount          Decimal       @default(0.00) @db.Decimal(10, 2)
+  totalTax            Decimal       @default(0.00) @db.Decimal(10, 2)
+  totalAmount         Decimal       @db.Decimal(10, 2)
+  amountPaid          Decimal       @default(0.00) @db.Decimal(10, 2)
+  balanceDue          Decimal       @db.Decimal(10, 2)
+  supplierGstin       String?
+  supplierLegalName   String
+  supplierStateCode   String
+  supplierAddress     Json?
+  customerName        String
+  customerPhone       String?
+  customerEmail       String?
+  customerGstin       String?
+  customerStateCode   String
+  customerAddress     Json?
+  notes               String?
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+
+  organization      Organization         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branch            Branch?              @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  student           Student              @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  studentMembership StudentMembership?   @relation(fields: [studentMembershipId], references: [id], onDelete: SetNull)
+  lineItems         InvoiceLineItem[]
+  payments          PaymentTransaction[]
+  creditNotes       CreditNote[]
+  refunds           RefundRecord[]
+
+  @@unique([tenantId, invoiceNumber])
+  @@index([tenantId, studentId, status])
+  @@index([tenantId, issueDate])
+}
+
+model InvoiceLineItem {
+  id             String  @id @default(uuid())
+  tenantId       String
+  invoiceId      String
+  description    String
+  sacCode        String  @default("9992")
+  quantity       Int     @default(1)
+  unitPrice      Decimal @db.Decimal(10, 2)
+  discountAmount Decimal @default(0.00) @db.Decimal(10, 2)
+  taxableAmount  Decimal @db.Decimal(10, 2)
+  taxRatePercent Decimal @db.Decimal(5, 2)
+  cgstAmount     Decimal @default(0.00) @db.Decimal(10, 2)
+  sgstAmount     Decimal @default(0.00) @db.Decimal(10, 2)
+  igstAmount     Decimal @default(0.00) @db.Decimal(10, 2)
+  totalAmount    Decimal @db.Decimal(10, 2)
+  metadata       Json?
+
+  invoice TaxInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+}
+
+model PaymentTransaction {
+  id                  String        @id @default(uuid())
+  tenantId            String
+  branchId            String?
+  invoiceId           String?
+  studentId           String
+  studentMembershipId String?
+  receiptNumber       String?
+  amount              Decimal       @db.Decimal(10, 2)
+  currency            String        @default("INR")
+  paymentMode         PaymentMode
+  utrReference        String?
+  idempotencyKey      String?
+  status              PaymentStatus @default(COMPLETED)
+  paidAt              DateTime      @default(now())
+  recordedByUserId    String?
+  notes               String?
+  refundedAmount      Decimal       @default(0.00) @db.Decimal(10, 2)
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+
+  organization      Organization       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branch            Branch?            @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  invoice           TaxInvoice?        @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  student           Student            @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  studentMembership StudentMembership? @relation(fields: [studentMembershipId], references: [id], onDelete: SetNull)
+  recordedByUser    User?              @relation("PaymentsRecordedByUser", fields: [recordedByUserId], references: [id], onDelete: SetNull)
+  refunds           RefundRecord[]
+
+  @@unique([tenantId, idempotencyKey])
+  @@index([tenantId, paidAt])
+  @@index([tenantId, studentId])
+  @@index([tenantId, invoiceId])
+  @@index([receiptNumber])
+}
+
+model RefundRecord {
+  id                   String       @id @default(uuid())
+  tenantId             String
+  paymentTransactionId String
+  invoiceId            String?
+  studentId            String
+  refundNumber         String
+  amount               Decimal      @db.Decimal(10, 2)
+  currency             String       @default("INR")
+  status               RefundStatus @default(COMPLETED)
+  reason               String
+  refundMode           PaymentMode
+  utrReference         String?
+  idempotencyKey       String?
+  creditRestored       Boolean      @default(false)
+  processedByUserId    String?
+  creditNoteId         String?
+  createdAt            DateTime     @default(now())
+  updatedAt            DateTime     @updatedAt
+
+  organization    Organization       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  payment         PaymentTransaction @relation(fields: [paymentTransactionId], references: [id], onDelete: Restrict)
+  invoice         TaxInvoice?        @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  student         Student            @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  processedByUser User?              @relation("RefundsProcessedByUser", fields: [processedByUserId], references: [id], onDelete: SetNull)
+  creditNote      CreditNote?        @relation(fields: [creditNoteId], references: [id], onDelete: SetNull)
+
+  @@unique([tenantId, refundNumber])
+  @@unique([tenantId, idempotencyKey])
+  @@index([tenantId, paymentTransactionId])
+  @@index([tenantId, studentId])
+}
+
+model CreditNote {
+  id               String           @id @default(uuid())
+  tenantId         String
+  invoiceId        String
+  creditNoteNumber String
+  reason           String
+  amount           Decimal          @db.Decimal(10, 2)
+  taxAmount        Decimal          @default(0.00) @db.Decimal(10, 2)
+  totalAmount      Decimal          @db.Decimal(10, 2)
+  status           CreditNoteStatus @default(ISSUED)
+  issuedAt         DateTime         @default(now())
+  issuedByUserId   String?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  organization Organization   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  invoice      TaxInvoice     @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  issuedByUser User?          @relation("CreditNotesIssuedByUser", fields: [issuedByUserId], references: [id], onDelete: SetNull)
+  refunds      RefundRecord[]
+
+  @@unique([tenantId, creditNoteNumber])
+  @@index([tenantId, invoiceId])
 }

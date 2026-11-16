@@ -8,3 +8,4 @@ export * from './lead.js';
 export * from './class.js';
 export * from './booking.js';
 export * from './membership.js';
+export * from './billing.js';

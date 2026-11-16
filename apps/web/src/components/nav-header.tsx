@@ -39,6 +39,9 @@ export function NavHeader() {
               <Link href="/memberships/plans" className="text-stone-700 hover:text-emerald-700">
                 Plans & Passes
               </Link>
+              <Link href="/billing" className="text-stone-700 hover:text-emerald-700">
+                Billing & Tax
+              </Link>
               <Link href="/students" className="text-stone-700 hover:text-emerald-700">
                 Students
               </Link>

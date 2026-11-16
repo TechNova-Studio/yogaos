@@ -13,6 +13,8 @@ import type {
   StudentMembershipDetails,
   MembershipPlanDetails,
   CreditLedgerEntryDetails,
+  TaxInvoiceDetails,
+  PaymentTransactionDetails,
 } from '@yogaos/contracts';
 
 export default function StudentDetailPage() {
@@ -30,6 +32,15 @@ export default function StudentDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+
+  // Billing & Payment state
+  const [studentInvoices, setStudentInvoices] = useState<TaxInvoiceDetails[]>([]);
+  const [studentPayments, setStudentPayments] = useState<PaymentTransactionDetails[]>([]);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [payAmount, setPayAmount] = useState<number>(0);
+  const [payMode, setPayMode] = useState<any>('UPI');
+  const [payUtr, setPayUtr] = useState('');
+  const [payNotes, setPayNotes] = useState('');
 
   // Membership Modals state
   const [showAssignModal, setShowAssignModal] = useState(false);
@@ -76,12 +87,14 @@ export default function StudentDetailPage() {
     try {
       setLoading(true);
       setError(null);
-      const [studentData, timelineData, bookingsData, membershipsData, plansData] = await Promise.all([
+      const [studentData, timelineData, bookingsData, membershipsData, plansData, invoicesRes, paymentsRes] = await Promise.all([
         client.getStudent(studentId),
         client.getStudentTimeline(studentId),
         client.getStudentBookings(studentId).catch(() => []),
         client.getStudentMemberships({ studentId }).catch(() => []),
         client.getMembershipPlans({ isActive: true }).catch(() => []),
+        client.getInvoices({ studentId }).catch(() => []),
+        client.getStudentPayments(studentId).catch(() => []),
       ]);
 
       setStudent(studentData);
@@ -89,6 +102,12 @@ export default function StudentDetailPage() {
       setBookings(bookingsData);
       setMemberships(membershipsData);
       setAvailablePlans(plansData);
+      if (invoicesRes) {
+        setStudentInvoices(invoicesRes);
+      }
+      if (paymentsRes) {
+        setStudentPayments(paymentsRes);
+      }
       if (plansData.length > 0 && !selectedPlanId) {
         setSelectedPlanId(plansData[0].id);
       }
@@ -246,6 +265,35 @@ export default function StudentDetailPage() {
       loadData();
     } catch (err: any) {
       setError(err.message || 'Failed to adjust credits');
+    }
+  };
+
+  const handleRecordPayment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (payAmount <= 0) {
+      setError('Please provide a positive payment amount');
+      return;
+    }
+    try {
+      setError(null);
+      const res = await client.recordPayment({
+        studentId,
+        amount: Number(payAmount),
+        paymentMode: payMode,
+        utrReference: payUtr || undefined,
+        notes: payNotes || undefined,
+        idempotencyKey: `pay-${studentId}-${Date.now()}`,
+      });
+      if (res) {
+        setMessage(`Payment recorded successfully: Receipt #${res.receiptNumber || res.id}`);
+        setShowPaymentModal(false);
+        setPayAmount(0);
+        setPayUtr('');
+        setPayNotes('');
+        loadData();
+      }
+    } catch (err: any) {
+      setError(err?.message || 'Failed to record payment');
     }
   };
 
@@ -765,6 +813,113 @@ export default function StudentDetailPage() {
             </CardContent>
           </Card>
 
+          {/* Billing, Invoices & Payment Receipts */}
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle>Billing, Invoices & Payment Receipts</CardTitle>
+                <CardDescription>GST tax invoices and multi-mode payment transaction history.</CardDescription>
+              </div>
+              <div className="flex items-center gap-2">
+                <Link href="/billing/invoices">
+                  <Button variant="outline" size="sm">
+                    All Invoices
+                  </Button>
+                </Link>
+                {(activeRole === 'OWNER' || activeRole === 'MANAGER' || isFrontDesk) && (
+                  <Button
+                    size="sm"
+                    className="bg-emerald-700 hover:bg-emerald-800 text-white"
+                    onClick={() => setShowPaymentModal(true)}
+                  >
+                    + Record Payment
+                  </Button>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Invoices List */}
+              <div>
+                <h4 className="text-xs font-semibold uppercase text-stone-500 mb-2">Issued Tax Invoices</h4>
+                {studentInvoices.length === 0 ? (
+                  <div className="text-xs text-stone-400 py-2">No invoices issued for this student.</div>
+                ) : (
+                  <div className="divide-y divide-stone-100 border rounded-md border-stone-200 overflow-hidden">
+                    {studentInvoices.map((inv) => (
+                      <div key={inv.id} className="p-3 flex items-center justify-between text-xs bg-white hover:bg-stone-50">
+                        <div>
+                          <Link href={`/billing/invoices/${inv.id}`} className="font-semibold text-emerald-700 hover:underline">
+                            {inv.invoiceNumber}
+                          </Link>
+                          <div className="text-stone-400 text-[11px]">
+                            Issued: {new Date(inv.issueDate).toLocaleDateString('en-IN')}
+                            {inv.dueDate && ` • Due: ${new Date(inv.dueDate).toLocaleDateString('en-IN')}`}
+                          </div>
+                        </div>
+                        <div className="text-right flex items-center gap-3">
+                          <div>
+                            <div className="font-bold text-stone-900">₹{inv.totalAmount.toLocaleString('en-IN')}</div>
+                            {inv.balanceDue > 0 ? (
+                              <div className="text-[10px] text-rose-600 font-semibold">
+                                Due: ₹{inv.balanceDue.toLocaleString('en-IN')}
+                              </div>
+                            ) : (
+                              <div className="text-[10px] text-emerald-600">Settled</div>
+                            )}
+                          </div>
+                          <Badge
+                            variant={
+                              inv.status === 'PAID'
+                                ? 'success'
+                                : inv.status === 'PARTIALLY_PAID'
+                                ? 'warning'
+                                : 'outline'
+                            }
+                          >
+                            {inv.status}
+                          </Badge>
+                          <Link href={`/billing/invoices/${inv.id}`}>
+                            <Button variant="outline" size="sm" className="text-[10px] px-2 py-0.5">
+                              View
+                            </Button>
+                          </Link>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Payments List */}
+              <div>
+                <h4 className="text-xs font-semibold uppercase text-stone-500 mb-2">Payment Receipts</h4>
+                {studentPayments.length === 0 ? (
+                  <div className="text-xs text-stone-400 py-2">No payment transactions recorded.</div>
+                ) : (
+                  <div className="divide-y divide-stone-100 border rounded-md border-stone-200 overflow-hidden">
+                    {studentPayments.map((p) => (
+                      <div key={p.id} className="p-3 flex items-center justify-between text-xs bg-white hover:bg-stone-50">
+                        <div>
+                          <span className="font-semibold text-stone-900">{p.receiptNumber || 'Receipt'}</span>
+                          <div className="text-stone-400 text-[11px]">
+                            {new Date(p.paidAt).toLocaleDateString('en-IN')} • Mode: {p.paymentMode}
+                            {p.utrReference && ` • UTR: ${p.utrReference}`}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className="font-bold text-stone-900">₹{p.amount.toLocaleString('en-IN')}</span>
+                          <Badge variant={p.status === 'COMPLETED' ? 'success' : 'outline'}>
+                            {p.status}
+                          </Badge>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
           {/* Activity Timeline Foundation */}
           <Card>
             <CardHeader>
@@ -1140,6 +1295,91 @@ export default function StudentDetailPage() {
                 </Button>
                 <Button type="submit" size="sm">
                   Apply Adjustment
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Record Payment Modal */}
+      {showPaymentModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
+            <h3 className="text-lg font-bold text-stone-900 mb-2">Record Payment</h3>
+            <p className="text-xs text-stone-500 mb-4">
+              Record receipt of payment for {student.fullName}.
+            </p>
+            <form onSubmit={handleRecordPayment} className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-stone-700 uppercase mb-1">
+                    Amount (₹) *
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="1"
+                    value={payAmount}
+                    onChange={(e) => setPayAmount(Number(e.target.value))}
+                    required
+                    className="w-full rounded-md border border-stone-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-stone-700 uppercase mb-1">
+                    Mode *
+                  </label>
+                  <select
+                    value={payMode}
+                    onChange={(e) => setPayMode(e.target.value)}
+                    className="w-full rounded-md border border-stone-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
+                  >
+                    <option value="UPI">UPI</option>
+                    <option value="CASH">Cash</option>
+                    <option value="CARD">Card</option>
+                    <option value="BANK_TRANSFER">Bank Transfer</option>
+                    <option value="ONLINE">Online</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-stone-700 uppercase mb-1">
+                  UTR / Reference Number
+                </label>
+                <input
+                  type="text"
+                  value={payUtr}
+                  onChange={(e) => setPayUtr(e.target.value)}
+                  placeholder="e.g. UPI Ref / Bank Txn ID"
+                  className="w-full rounded-md border border-stone-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-stone-700 uppercase mb-1">
+                  Notes
+                </label>
+                <input
+                  type="text"
+                  value={payNotes}
+                  onChange={(e) => setPayNotes(e.target.value)}
+                  placeholder="Optional notes or batch details"
+                  className="w-full rounded-md border border-stone-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4 border-t border-stone-200">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setShowPaymentModal(false)}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" variant="primary" className="bg-emerald-700 text-white">
+                  Record & Issue Receipt
                 </Button>
               </div>
             </form>
