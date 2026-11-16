@@ -109,6 +109,7 @@ model User {
   uploadedMedia            MediaAsset[]              @relation("MediaUploadedByUser")
   createdAsanas            Asana[]                   @relation("AsanasCreatedByUser")
   createdSequences         Sequence[]                @relation("SequencesCreatedByUser")
+  conductorSessionsConducted ConductorSession[]      @relation("ConductorSessionsConducted")
 
   @@index([email])
   @@index([phone])
@@ -204,6 +205,8 @@ model Organization {
   sequences               Sequence[]
   sequenceVersions        SequenceVersion[]
   sequenceSteps           SequenceStep[]
+  conductorSessions       ConductorSession[]
+  conductorExecutionEvents ConductorExecutionEvent[]
 
   @@index([slug])
 }
@@ -554,6 +557,7 @@ model ClassSessionInstance {
   attachedSequenceVersion SequenceVersion? @relation(fields: [attachedSequenceVersionId], references: [id], onDelete: SetNull)
   bookings                Booking[]
   waitlistEntries         WaitlistEntry[]
+  conductorSession        ConductorSession?
 
   @@index([tenantId, sessionDate])
   @@index([tenantId, startTimestamp])
@@ -1331,6 +1335,7 @@ model SequenceVersion {
   sequence         Sequence               @relation(fields: [sequenceId], references: [id], onDelete: Cascade)
   steps            SequenceStep[]
   attachedSessions ClassSessionInstance[]
+  conductorSessions ConductorSession[]
 
   @@unique([tenantId, sequenceId, versionNumber])
   @@index([sequenceId, versionNumber])
@@ -1370,3 +1375,91 @@ model SequenceStep {
   @@unique([tenantId, sequenceVersionId, stepOrder])
   @@index([sequenceVersionId, stepOrder])
 }
+
+// ----------------------------------------------------------------------------
+// P16: Automated Class Conductor Runtime Engine
+// ----------------------------------------------------------------------------
+
+enum ConductorSessionStatus {
+  READY
+  RUNNING
+  PAUSED
+  COMPLETED
+  INTERRUPTED
+  INTERRUPTED_ABANDONED
+}
+
+enum ConductorStepPhase {
+  POSTURE_HOLD
+  BILATERAL_SIDE_A
+  BILATERAL_SIDE_B
+  REST_INTERVAL
+  TRANSITION
+}
+
+enum ConductorEventType {
+  SESSION_INITIALIZED
+  SESSION_STARTED
+  STEP_STARTED
+  STEP_COMPLETED
+  STEP_SKIPPED
+  STEP_PREVIOUS
+  TIME_ADJUSTED
+  SESSION_PAUSED
+  SESSION_RESUMED
+  SESSION_COMPLETED
+  SESSION_INTERRUPTED
+  SESSION_ABANDONED
+}
+
+model ConductorSession {
+  id                     String                 @id @default(uuid())
+  tenantId               String
+  sessionInstanceId      String                 @unique
+  sequenceVersionId      String
+  conductorInstructorId  String
+  status                 ConductorSessionStatus @default(READY)
+  currentStepIndex       Int                    @default(0)
+  currentPhase           ConductorStepPhase     @default(POSTURE_HOLD)
+  actualStartedAt        DateTime?
+  actualConcludedAt      DateTime?
+  totalElapsedSeconds    Int                    @default(0)
+  completedStepsCount    Int                    @default(0)
+  skippedStepsCount      Int                    @default(0)
+  addedTimeSeconds       Int                    @default(0)
+  clientSessionUuid      String
+  lastHeartbeatAt        DateTime?
+  createdAt              DateTime               @default(now())
+  updatedAt              DateTime               @updatedAt
+
+  organization        Organization            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  sessionInstance     ClassSessionInstance    @relation(fields: [sessionInstanceId], references: [id], onDelete: Cascade)
+  sequenceVersion     SequenceVersion         @relation(fields: [sequenceVersionId], references: [id], onDelete: Restrict)
+  conductorInstructor User                    @relation("ConductorSessionsConducted", fields: [conductorInstructorId], references: [id], onDelete: Restrict)
+  events              ConductorExecutionEvent[]
+
+  @@index([tenantId, status])
+  @@index([sessionInstanceId])
+  @@index([sequenceVersionId])
+}
+
+model ConductorExecutionEvent {
+  id                 String             @id @default(uuid())
+  tenantId           String
+  conductorSessionId String
+  clientEventUuid    String             @unique
+  eventType          ConductorEventType
+  stepOrder          Int?
+  clientTimestamp    DateTime
+  serverReceivedAt   DateTime           @default(now())
+  payload            Json?
+  createdAt          DateTime           @default(now())
+
+  organization     Organization     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  conductorSession ConductorSession @relation(fields: [conductorSessionId], references: [id], onDelete: Cascade)
+
+  @@unique([conductorSessionId, clientEventUuid])
+  @@index([conductorSessionId, clientTimestamp])
+  @@index([tenantId, eventType])
+}
+

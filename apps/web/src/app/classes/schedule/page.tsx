@@ -500,12 +500,20 @@ export default function ScheduleCalendarPage() {
 
                           {canManage && !isCancelled && (
                             <div className="mt-2.5 flex items-center justify-between border-t border-stone-100 pt-1.5">
-                              <Link
-                                href={`/bookings/roster/${session.id}`}
-                                className="text-[11px] font-bold text-emerald-700 hover:underline"
-                              >
-                                Roster & Check-In
-                              </Link>
+                              <div className="flex items-center gap-2">
+                                <Link
+                                  href={`/bookings/roster/${session.id}`}
+                                  className="text-[11px] font-bold text-emerald-700 hover:underline"
+                                >
+                                  Roster
+                                </Link>
+                                <Link
+                                  href={`/conductor/${session.id}`}
+                                  className="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-bold text-amber-800 hover:bg-amber-200"
+                                >
+                                  ⏱️ Conduct
+                                </Link>
+                              </div>
                               <div className="flex items-center gap-2">
                                 <button
                                   onClick={() => openRescheduleModal(session)}

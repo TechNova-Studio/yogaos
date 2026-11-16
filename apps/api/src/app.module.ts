@@ -14,6 +14,7 @@ import { BillingModule } from './modules/billing/billing.module.js';
 import { MediaModule } from './modules/media/media.module.js';
 import { AsanaModule } from './modules/asana/asana.module.js';
 import { SequencesModule } from './modules/sequences/sequences.module.js';
+import { ConductorModule } from './modules/conductor/conductor.module.js';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { SequencesModule } from './modules/sequences/sequences.module.js';
     MediaModule,
     AsanaModule,
     SequencesModule,
+    ConductorModule,
   ],
 })
 export class AppModule {}

@@ -104,6 +104,9 @@ import {
   ReorderSequenceStepsInput,
   PublishSequenceInput,
   SequenceStepInput,
+  InitConductorSessionInput,
+  ConductorActionInput,
+  ConductorSessionState,
 } from '@yogaos/contracts';
 
 export interface ApiClientOptions {
@@ -1041,6 +1044,27 @@ export class ApiClient {
     return this.request<any>(`/sequences/${sequenceId}/steps/reorder`, {
       method: 'PUT',
       body: JSON.stringify(data),
+    });
+  }
+
+  // --------------------------------------------------------------------------
+  // P16: Automated Class Conductor
+  // --------------------------------------------------------------------------
+  async initConductorSession(data: InitConductorSessionInput): Promise<ConductorSessionState> {
+    return this.request<ConductorSessionState>('/conductor/sessions/init', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getConductorSession(sessionInstanceId: string): Promise<ConductorSessionState> {
+    return this.request<ConductorSessionState>(`/conductor/sessions/${sessionInstanceId}`);
+  }
+
+  async sendConductorAction(sessionInstanceId: string, action: ConductorActionInput): Promise<ConductorSessionState> {
+    return this.request<ConductorSessionState>(`/conductor/sessions/${sessionInstanceId}/action`, {
+      method: 'POST',
+      body: JSON.stringify(action),
     });
   }
 }
