@@ -79,6 +79,17 @@ import {
   RefundListQuery,
   CreditNoteDetails,
   DailyCollectionSummary,
+  UpcomingRenewalsQuery,
+  RenewMembershipInput,
+  MembershipRenewalResult,
+  CreateBillingReminderInput,
+  BillingReminderQuery,
+  UpsertPaymentGatewayConfigInput,
+  InitiateCheckoutInput,
+  CheckoutSessionDetails,
+  WebhookEventQuery,
+  ReconcilePaymentInput,
+  ReconciliationQuery,
 } from '@yogaos/contracts';
 
 export interface ApiClientOptions {
@@ -740,6 +751,101 @@ export class ApiClient {
   async getDailyCollections(date?: string): Promise<DailyCollectionSummary> {
     const qs = date ? `?date=${date}` : '';
     return this.request<DailyCollectionSummary>(`/billing/summary/daily${qs}`);
+  }
+
+  // Renewals
+  async getUpcomingRenewals(query?: UpcomingRenewalsQuery): Promise<any> {
+    const params = new URLSearchParams();
+    if (query?.daysAhead !== undefined) params.append('daysAhead', String(query.daysAhead));
+    if (query?.status) params.append('status', query.status);
+    if (query?.branchId) params.append('branchId', query.branchId);
+    if (query?.includeExpired !== undefined) params.append('includeExpired', String(query.includeExpired));
+    if (query?.page) params.append('page', String(query.page));
+    if (query?.limit) params.append('limit', String(query.limit));
+    const qs = params.toString() ? `?${params.toString()}` : '';
+    return this.request<any>(`/billing/renewals/upcoming${qs}`);
+  }
+
+  async renewMembership(data: RenewMembershipInput): Promise<MembershipRenewalResult> {
+    return this.request<MembershipRenewalResult>('/billing/renewals', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  // Reminders
+  async createBillingReminder(data: CreateBillingReminderInput): Promise<any> {
+    return this.request<any>('/billing/reminders', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getBillingReminders(query?: BillingReminderQuery): Promise<any[]> {
+    const params = new URLSearchParams();
+    if (query?.studentId) params.append('studentId', query.studentId);
+    if (query?.studentMembershipId) params.append('studentMembershipId', query.studentMembershipId);
+    if (query?.invoiceId) params.append('invoiceId', query.invoiceId);
+    if (query?.reminderType) params.append('reminderType', query.reminderType);
+    if (query?.channel) params.append('channel', query.channel);
+    if (query?.status) params.append('status', query.status);
+    if (query?.page) params.append('page', String(query.page));
+    if (query?.limit) params.append('limit', String(query.limit));
+    const qs = params.toString() ? `?${params.toString()}` : '';
+    return this.request<any[]>(`/billing/reminders${qs}`);
+  }
+
+  async dispatchBillingReminder(reminderId: string): Promise<any> {
+    return this.request<any>(`/billing/reminders/${reminderId}/dispatch`, {
+      method: 'POST',
+    });
+  }
+
+  // Payment Gateways & Checkout
+  async getGatewayConfigs(): Promise<any[]> {
+    return this.request<any[]>('/billing/gateways/configs');
+  }
+
+  async upsertGatewayConfig(data: UpsertPaymentGatewayConfigInput): Promise<any> {
+    return this.request<any>('/billing/gateways/configs', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async initiateCheckout(data: InitiateCheckoutInput): Promise<CheckoutSessionDetails> {
+    return this.request<CheckoutSessionDetails>('/billing/gateways/checkout', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getWebhookEvents(query?: WebhookEventQuery): Promise<any[]> {
+    const params = new URLSearchParams();
+    if (query?.provider) params.append('provider', query.provider);
+    if (query?.status) params.append('status', query.status);
+    if (query?.page) params.append('page', String(query.page));
+    if (query?.limit) params.append('limit', String(query.limit));
+    const qs = params.toString() ? `?${params.toString()}` : '';
+    return this.request<any[]>(`/billing/gateways/webhooks${qs}`);
+  }
+
+  // Reconciliation
+  async reconcilePayment(data: ReconcilePaymentInput): Promise<any> {
+    return this.request<any>('/billing/gateways/reconcile', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getReconciliationList(query?: ReconciliationQuery): Promise<any[]> {
+    const params = new URLSearchParams();
+    if (query?.status) params.append('status', query.status);
+    if (query?.provider) params.append('provider', query.provider);
+    if (query?.page) params.append('page', String(query.page));
+    if (query?.limit) params.append('limit', String(query.limit));
+    const qs = params.toString() ? `?${params.toString()}` : '';
+    return this.request<any[]>(`/billing/gateways/reconciliation${qs}`);
   }
 }
 

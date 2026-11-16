@@ -193,6 +193,9 @@ model Organization {
   payments                PaymentTransaction[]
   refunds                 RefundRecord[]
   creditNotes             CreditNote[]
+  gatewayConfigs          PaymentGatewayConfig[]
+  billingReminders        BillingReminder[]
+  webhookEvents           WebhookEvent[]
 
   @@index([slug])
 }
@@ -348,6 +351,7 @@ model Student {
   invoices            TaxInvoice[]
   payments            PaymentTransaction[]
   refunds             RefundRecord[]
+  billingReminders    BillingReminder[]
 
   @@index([tenantId, mobilePhone])
   @@index([tenantId, email])
@@ -707,37 +711,43 @@ model MembershipPlan {
 }
 
 model StudentMembership {
-  id                    String           @id @default(uuid())
-  tenantId              String
-  studentId             String
-  membershipPlanId      String
-  homeBranchId          String?
-  planNameSnapshot      String
-  planTypeSnapshot      PlanType
-  priceSnapshot         Decimal          @db.Decimal(10, 2)
-  isMultiBranchSnapshot Boolean          @default(true)
-  status                MembershipStatus @default(ACTIVE)
-  startDate             DateTime
-  expiryDate            DateTime
-  totalCredits          Int?
-  remainingCredits      Int?
-  freezesUsed           Int              @default(0)
-  frozenAt              DateTime?
-  freezeReason          String?
-  totalFrozenDays       Int              @default(0)
-  notes                 String?
-  createdAt             DateTime         @default(now())
-  updatedAt             DateTime         @updatedAt
-  deletedAt             DateTime?
+  id                      String                  @id @default(uuid())
+  tenantId                String
+  studentId               String
+  membershipPlanId        String
+  homeBranchId            String?
+  planNameSnapshot        String
+  planTypeSnapshot        PlanType
+  priceSnapshot           Decimal                 @db.Decimal(10, 2)
+  isMultiBranchSnapshot   Boolean                 @default(true)
+  status                  MembershipStatus        @default(ACTIVE)
+  startDate               DateTime
+  expiryDate              DateTime
+  totalCredits            Int?
+  remainingCredits        Int?
+  freezesUsed             Int                     @default(0)
+  frozenAt                DateTime?
+  freezeReason            String?
+  totalFrozenDays         Int                     @default(0)
+  notes                   String?
+  renewedFromMembershipId String?
+  renewalStatus           MembershipRenewalStatus @default(UPCOMING)
+  autoRenewConsent        Boolean                 @default(false)
+  createdAt               DateTime                @default(now())
+  updatedAt               DateTime                @updatedAt
+  deletedAt               DateTime?
 
   organization Organization             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   student      Student                  @relation(fields: [studentId], references: [id], onDelete: Cascade)
   plan         MembershipPlan           @relation(fields: [membershipPlanId], references: [id], onDelete: Restrict)
   homeBranch   Branch?                  @relation(fields: [homeBranchId], references: [id], onDelete: SetNull)
+  renewedFrom  StudentMembership?       @relation("MembershipRenewals", fields: [renewedFromMembershipId], references: [id], onDelete: SetNull)
+  renewals     StudentMembership[]      @relation("MembershipRenewals")
   bookings     Booking[]
   creditLedger MembershipCreditLedger[]
   invoices     TaxInvoice[]
   payments     PaymentTransaction[]
+  reminders    BillingReminder[]
 
   @@index([tenantId, studentId, status])
   @@index([tenantId, expiryDate])
@@ -854,6 +864,7 @@ model TaxInvoice {
   payments          PaymentTransaction[]
   creditNotes       CreditNote[]
   refunds           RefundRecord[]
+  reminders         BillingReminder[]
 
   @@unique([tenantId, invoiceNumber])
   @@index([tenantId, studentId, status])
@@ -883,25 +894,31 @@ model InvoiceLineItem {
 }
 
 model PaymentTransaction {
-  id                  String        @id @default(uuid())
-  tenantId            String
-  branchId            String?
-  invoiceId           String?
-  studentId           String
-  studentMembershipId String?
-  receiptNumber       String?
-  amount              Decimal       @db.Decimal(10, 2)
-  currency            String        @default("INR")
-  paymentMode         PaymentMode
-  utrReference        String?
-  idempotencyKey      String?
-  status              PaymentStatus @default(COMPLETED)
-  paidAt              DateTime      @default(now())
-  recordedByUserId    String?
-  notes               String?
-  refundedAmount      Decimal       @default(0.00) @db.Decimal(10, 2)
-  createdAt           DateTime      @default(now())
-  updatedAt           DateTime      @updatedAt
+  id                   String                  @id @default(uuid())
+  tenantId             String
+  branchId             String?
+  invoiceId            String?
+  studentId            String
+  studentMembershipId  String?
+  receiptNumber        String?
+  amount               Decimal                 @db.Decimal(10, 2)
+  currency             String                  @default("INR")
+  paymentMode          PaymentMode
+  utrReference         String?
+  idempotencyKey       String?
+  status               PaymentStatus           @default(COMPLETED)
+  paidAt               DateTime                @default(now())
+  recordedByUserId     String?
+  notes                String?
+  refundedAmount       Decimal                 @default(0.00) @db.Decimal(10, 2)
+  gatewayProvider      PaymentGatewayProvider?
+  gatewayOrderId       String?
+  gatewayPaymentId     String?
+  gatewaySignature     String?
+  gatewayResponse      Json?
+  reconciliationStatus ReconciliationStatus    @default(NOT_APPLICABLE)
+  createdAt            DateTime                @default(now())
+  updatedAt            DateTime                @updatedAt
 
   organization      Organization       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   branch            Branch?            @relation(fields: [branchId], references: [id], onDelete: SetNull)
@@ -910,11 +927,15 @@ model PaymentTransaction {
   studentMembership StudentMembership? @relation(fields: [studentMembershipId], references: [id], onDelete: SetNull)
   recordedByUser    User?              @relation("PaymentsRecordedByUser", fields: [recordedByUserId], references: [id], onDelete: SetNull)
   refunds           RefundRecord[]
+  billingReminders  BillingReminder[]
+  webhookEvents     WebhookEvent[]
 
   @@unique([tenantId, idempotencyKey])
   @@index([tenantId, paidAt])
   @@index([tenantId, studentId])
   @@index([tenantId, invoiceId])
+  @@index([tenantId, gatewayOrderId])
+  @@index([tenantId, gatewayPaymentId])
   @@index([receiptNumber])
 }
 
@@ -973,4 +994,129 @@ model CreditNote {
 
   @@unique([tenantId, creditNoteNumber])
   @@index([tenantId, invoiceId])
+}
+
+enum PaymentGatewayProvider {
+  RAZORPAY
+  STRIPE
+}
+
+enum ReconciliationStatus {
+  NOT_APPLICABLE
+  MATCHED
+  UNMATCHED
+  MANUALLY_RECONCILED
+  DISCREPANCY
+}
+
+enum WebhookEventStatus {
+  RECEIVED
+  PROCESSING
+  PROCESSED
+  FAILED
+  IGNORED
+}
+
+enum ReminderType {
+  EXPIRY_APPROACHING
+  MEMBERSHIP_EXPIRED
+  INVOICE_OVERDUE
+  PAYMENT_REMINDER
+}
+
+enum NotificationChannel {
+  EMAIL
+  SMS
+  WHATSAPP
+}
+
+enum NotificationDeliveryStatus {
+  PENDING
+  SENT
+  DELIVERED
+  FAILED
+  SKIPPED
+}
+
+enum MembershipRenewalStatus {
+  UPCOMING
+  RENEWED
+  LAPSED
+  OPTED_OUT
+}
+
+model PaymentGatewayConfig {
+  id              String                 @id @default(uuid())
+  tenantId        String
+  provider        PaymentGatewayProvider
+  isEnabled       Boolean                @default(false)
+  isTestMode      Boolean                @default(true)
+  apiKey          String?
+  apiSecret       String?
+  webhookSecret   String?
+  merchantAccount String?
+  settings        Json?
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+
+  organization Organization @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, provider])
+  @@index([tenantId])
+}
+
+model WebhookEvent {
+  id                   String                 @id @default(uuid())
+  tenantId             String
+  provider             PaymentGatewayProvider
+  eventId              String
+  eventType            String
+  signature            String?
+  payload              Json
+  status               WebhookEventStatus     @default(RECEIVED)
+  errorMessage         String?
+  processedAt          DateTime?
+  paymentTransactionId String?
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+
+  organization       Organization        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  paymentTransaction PaymentTransaction? @relation(fields: [paymentTransactionId], references: [id], onDelete: SetNull)
+
+  @@unique([provider, eventId])
+  @@index([tenantId, status])
+  @@index([tenantId, createdAt])
+}
+
+model BillingReminder {
+  id                   String                     @id @default(uuid())
+  tenantId             String
+  studentId            String
+  studentMembershipId  String?
+  invoiceId            String?
+  paymentTransactionId String?
+  reminderType         ReminderType
+  channel              NotificationChannel
+  recipient            String
+  templateName         String?
+  subject              String?
+  messageBody          String
+  status               NotificationDeliveryStatus @default(PENDING)
+  scheduledFor         DateTime                   @default(now())
+  sentAt               DateTime?
+  deliveredAt          DateTime?
+  failedAt             DateTime?
+  failureReason        String?
+  metadata             Json?
+  createdAt            DateTime                   @default(now())
+  updatedAt            DateTime                   @updatedAt
+
+  organization       Organization        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  student            Student             @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  studentMembership  StudentMembership?  @relation(fields: [studentMembershipId], references: [id], onDelete: SetNull)
+  invoice            TaxInvoice?         @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  paymentTransaction PaymentTransaction? @relation(fields: [paymentTransactionId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, studentId, reminderType])
+  @@index([tenantId, status, scheduledFor])
 }

@@ -88,7 +88,7 @@ Quality Gates Passed: 4 / 6 (Gate 1 Foundation, Gate 2 Multi-Tenant, Gate 3 Oper
   - [x] Attendance states (`ATTENDED`, `NO_SHOW`, `LATE_CANCEL`, `BOOKED`) and audit trail for staff corrections.
   - [x] Studio-wide booking management directory (`/bookings`) and student booking history tab.
   - [x] Automated tests verified: 82 total (74 real PostgreSQL database integration tests + 8 pure unit tests).
-* **Gate 4: Commercial, Entitlements & Billing Accuracy** — Status: **IN PROGRESS (P11 & P12 Completed)**
+* **Gate 4: Commercial, Entitlements & Billing Accuracy** — Status: **COMPLETED (P11, P12 & P13)**
   - [x] Tenant-scoped membership plans (`TIME_UNLIMITED`, `CLASS_PACK`, `SINGLE_DROP_IN`) with pricing, validity, GST rate, SAC code, freeze limits, and multi-branch configuration.
   - [x] Student membership assignment with historical snapshot preservation (`planNameSnapshot`, `priceSnapshot`, `planTypeSnapshot`, `isMultiBranchSnapshot`).
   - [x] Double-entry entitlement credit ledger (`MembershipCreditLedger`) tracking `INITIAL_ALLOCATION`, `REDEMPTION`, `REFUND_RESTORE`, `MANUAL_ADJUSTMENT`, and `EXPIRATION`.
@@ -103,8 +103,14 @@ Quality Gates Passed: 4 / 6 (Gate 1 Foundation, Gate 2 Multi-Tenant, Gate 3 Oper
   - [x] Sequential tax invoice generation (`INV/YYYY-YY/XXXXX`), financial year resets, line items with SAC codes, customer/supplier snapshots, and balance due tracking.
   - [x] Financial audit trails: unpaid invoice voiding with audit log; immutability of paid invoices.
   - [x] Refund & adjustments engine: refund records (`REF/YYYY-YY/XXXXX`), credit notes (`CN/YYYY-YY/XXXXX`), balance due reduction, idempotency, and transactional membership credit restoration.
-  - [x] Full UI workflows: Billing operations & daily collections reconciliation dashboard (`/billing`), tax invoices directory (`/billing/invoices`), printable GST tax invoice view (`/billing/invoices/[id]`), and student detail billing & payment history tab (`/students/[id]`).
-  - [x] Automated tests verified: 132 total (113 real PostgreSQL database integration tests + 19 unit tests).
+  - [x] Membership renewal workflows: upcoming expiries identification (7d, 3d, today, expired), staff-assisted renewal with snapshot preservation, credit allocation, invoice generation, and duplicate renewal prevention.
+  - [x] Multi-channel billing reminders & alerts (`EMAIL`, `SMS`, `WHATSAPP`) with sandbox delivery status tracking (`PENDING`, `SENT`, `DELIVERED`, `FAILED`), 24h deduplication, and automated batch scanning.
+  - [x] Payment gateway integrations (Razorpay for India/UPI, Stripe for International) with raw body HMAC-SHA256 signature verification, 300s replay attack window, and idempotent event processing.
+  - [x] Online checkout initiation creating order sessions and pending transactions.
+  - [x] Gateway transaction reconciliation tracking (`MATCHED`, `DISCREPANCY`, `MANUALLY_RECONCILED`) and operational dashboard.
+  - [x] Background worker daemon integration for recurring renewal checks and queued reminder dispatching.
+  - [x] Full UI workflows: Billing operations, daily collections reconciliation, renewals, reminders, gateway configuration, and discrepancies dashboard (`/billing`), tax invoices directory (`/billing/invoices`), printable GST tax invoice view (`/billing/invoices/[id]`), and student detail billing history tab.
+  - [x] Automated tests verified: 152 total (126 real PostgreSQL database integration tests + 26 unit tests).
 * **Gate 5: Conductor Offline Resilience** — Status: **PENDING (Phase 7)**
 * **Gate 6: Production Release Readiness** — Status: **PENDING (Phase 8)**
 

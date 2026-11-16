@@ -9,6 +9,13 @@ import { BillingCommonController } from './billing-common.controller.js';
 import { TaxSettingsService } from './tax-settings.service.js';
 import { CollectionsSummaryService } from './collections-summary.service.js';
 import { NumberingService } from './numbering.service.js';
+import { RenewalsController } from './renewals.controller.js';
+import { RenewalsService } from './renewals.service.js';
+import { RemindersController } from './reminders.controller.js';
+import { RemindersService } from './reminders.service.js';
+import { GatewaysController } from './gateways.controller.js';
+import { GatewaysService } from './gateways.service.js';
+import { WebhooksController } from './webhooks.controller.js';
 import { StudentPlansModule } from '../student-plans/student-plans.module.js';
 import { AuditService } from '../../common/services/audit.service.js';
 
@@ -19,6 +26,10 @@ import { AuditService } from '../../common/services/audit.service.js';
     PaymentsController,
     RefundsController,
     BillingCommonController,
+    RenewalsController,
+    RemindersController,
+    GatewaysController,
+    WebhooksController,
   ],
   providers: [
     InvoicesService,
@@ -27,6 +38,9 @@ import { AuditService } from '../../common/services/audit.service.js';
     TaxSettingsService,
     CollectionsSummaryService,
     NumberingService,
+    RenewalsService,
+    RemindersService,
+    GatewaysService,
     AuditService,
   ],
   exports: [
@@ -36,6 +50,9 @@ import { AuditService } from '../../common/services/audit.service.js';
     TaxSettingsService,
     CollectionsSummaryService,
     NumberingService,
+    RenewalsService,
+    RemindersService,
+    GatewaysService,
   ],
 })
 export class BillingModule {}

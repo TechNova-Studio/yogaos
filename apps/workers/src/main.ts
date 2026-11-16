@@ -1,5 +1,6 @@
 import { getLogger } from '@yogaos/logger';
 import { RedisService } from './redis.service.js';
+import { BillingAutomationWorker } from './billing-automation.worker.js';
 
 const logger = getLogger('WorkerDaemon');
 
@@ -9,6 +10,11 @@ async function startWorkers() {
 
   const redisStatus = await redisService.checkHealth();
   logger.info({ redisStatus }, 'Worker Redis connectivity verified');
+
+  const billingWorker = new BillingAutomationWorker();
+  logger.info('Registering Billing Automation Worker...');
+  // Run an initial check
+  await billingWorker.processBillingAutomation();
 
   logger.info('YogaOS Worker Daemon ready. Listening for queue dispatches.');
 
