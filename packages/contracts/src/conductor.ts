@@ -36,6 +36,8 @@ export const ConductorEventTypeEnum = z.enum([
   'SESSION_COMPLETED',
   'SESSION_INTERRUPTED',
   'SESSION_ABANDONED',
+  'SESSION_RECOVERED',
+  'OFFLINE_SYNC_COMPLETED',
   'MEDIA_PLAYBACK_STARTED',
   'MEDIA_PLAYBACK_ERROR',
 ]);
@@ -51,6 +53,7 @@ export const ConductorActionTypeEnum = z.enum([
   'ADJUST_TIME',
   'END_SESSION',
   'HEARTBEAT',
+  'RECOVER',
 ]);
 export type ConductorActionType = z.infer<typeof ConductorActionTypeEnum>;
 
@@ -165,8 +168,112 @@ export interface ConductorSessionState {
   actualStartedAt: string | null;
   actualConcludedAt: string | null;
   lastHeartbeatAt: string | null;
+  lastSyncAt: string | null;
   currentStep: ConductorStepView | null;
   nextStep: ConductorStepView | null;
   steps: ConductorStepView[];
   mediaManifest?: ConductorSessionMediaManifest | null;
+}
+
+// ----------------------------------------------------------------------------
+// P18: Recovery, Event Sync & Session History
+// ----------------------------------------------------------------------------
+
+export const ConductorSyncEventSchema = z.object({
+  clientEventUuid: z.string().uuid(),
+  eventType: ConductorEventTypeEnum,
+  stepOrder: z.number().int().min(0).nullable().optional(),
+  clientTimestamp: z.string().datetime(),
+  payload: z.record(z.unknown()).optional(),
+});
+export type ConductorSyncEvent = z.infer<typeof ConductorSyncEventSchema>;
+
+export const ConductorBatchSyncSchema = z.object({
+  events: z.array(ConductorSyncEventSchema).min(1),
+  clientSessionUuid: z.string().uuid().optional(),
+  sessionStateSnapshot: z
+    .object({
+      currentStepIndex: z.number().int().min(0),
+      currentPhase: ConductorStepPhaseEnum,
+      completedStepsCount: z.number().int().min(0),
+      skippedStepsCount: z.number().int().min(0),
+      totalElapsedSeconds: z.number().int().min(0),
+      status: ConductorSessionStatusEnum.optional(),
+    })
+    .optional(),
+});
+export type ConductorBatchSyncInput = z.infer<typeof ConductorBatchSyncSchema>;
+
+export interface ConductorBatchSyncResponse {
+  acknowledgedEventUuids: string[];
+  alreadyProcessedEventUuids: string[];
+  failedEventUuids: string[];
+  currentState: ConductorSessionState;
+  syncedAt: string;
+}
+
+export const ConductorRecoverSessionSchema = z.object({
+  action: z.enum(['RESUME', 'ABANDON']),
+  reason: z.string().max(500).optional(),
+  clientEventUuid: z.string().uuid(),
+  clientTimestamp: z.string().datetime().optional(),
+});
+export type ConductorRecoverSessionInput = z.infer<typeof ConductorRecoverSessionSchema>;
+
+export interface ConductorRecoveryResponse {
+  session: ConductorSessionState;
+  isUnfinished: boolean;
+  isInterrupted: boolean;
+  isAbandoned: boolean;
+  canResume: boolean;
+  serverLastEventAt: string | null;
+  lastSyncAt: string | null;
+}
+
+export const ConductorSessionHistoryFilterSchema = z.object({
+  status: ConductorSessionStatusEnum.optional(),
+  instructorId: z.string().uuid().optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+  offset: z.coerce.number().int().min(0).default(0),
+});
+export type ConductorSessionHistoryFilter = z.infer<typeof ConductorSessionHistoryFilterSchema>;
+
+export interface ConductorSessionHistoryItem {
+  id: string;
+  sessionInstanceId: string;
+  sequenceTitle: string;
+  sequenceVersionId: string;
+  instructorId: string;
+  instructorName: string;
+  sessionDate: string;
+  branchName?: string;
+  roomName?: string;
+  status: ConductorSessionStatus;
+  totalSteps: number;
+  completedStepsCount: number;
+  skippedStepsCount: number;
+  totalElapsedSeconds: number;
+  actualStartedAt: string | null;
+  actualConcludedAt: string | null;
+  lastSyncAt: string | null;
+  eventsCount: number;
+  createdAt: string;
+}
+
+export interface ConductorExecutionEventDetail {
+  id: string;
+  clientEventUuid: string;
+  eventType: ConductorEventType;
+  stepOrder: number | null;
+  clientTimestamp: string;
+  serverReceivedAt: string;
+  payload: Record<string, unknown> | null;
+  isOfflineSync: boolean;
+}
+
+export interface ConductorSessionHistoryResponse {
+  items: ConductorSessionHistoryItem[];
+  total: number;
+  limit: number;
+  offset: number;
 }

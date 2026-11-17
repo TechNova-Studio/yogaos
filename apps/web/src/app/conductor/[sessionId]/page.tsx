@@ -19,6 +19,35 @@ import {
   StorageQuotaInfo,
   SessionPreparationProgress,
 } from '../../../lib/offline-media-storage';
+import {
+  enqueueConductorEvent,
+  getEventsBySession,
+  synchronizePendingEvents,
+  updateEventsSyncStatus,
+} from '../../../lib/conductor-event-queue';
+
+function actionToEventType(action: ConductorActionType): any {
+  switch (action) {
+    case 'START':
+      return 'SESSION_STARTED';
+    case 'PAUSE':
+      return 'SESSION_PAUSED';
+    case 'RESUME':
+      return 'SESSION_RESUMED';
+    case 'NEXT_STEP':
+      return 'STEP_COMPLETED';
+    case 'PREVIOUS_STEP':
+      return 'STEP_PREVIOUS';
+    case 'SKIP_STEP':
+      return 'STEP_SKIPPED';
+    case 'ADJUST_TIME':
+      return 'TIME_ADJUSTED';
+    case 'END_SESSION':
+      return 'SESSION_INTERRUPTED';
+    default:
+      return 'STEP_STARTED';
+  }
+}
 
 function generateUuid(): string {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
@@ -55,6 +84,12 @@ export default function ConductorWorkspacePage() {
   // Offline Preparation Progress
   const [prepProgress, setPrepProgress] = useState<SessionPreparationProgress | null>(null);
   const [isPreparing, setIsPreparing] = useState(false);
+
+  // P18: Durable Queue, Recovery & Sync State
+  const [unsyncedCount, setUnsyncedCount] = useState<number>(0);
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
+  const [syncError, setSyncError] = useState<string | null>(null);
+  const [showRecoveryBanner, setShowRecoveryBanner] = useState<boolean>(false);
 
   // Local Media Blobs for Active Step
   const [localVideoUrl, setLocalVideoUrl] = useState<string | null>(null);
@@ -116,6 +151,20 @@ export default function ConductorWorkspacePage() {
       }
 
       setSession(sessionData);
+
+      // Check for unfinished / interrupted session requiring recovery prompt
+      if (sessionData.status === 'PAUSED' || sessionData.status === 'INTERRUPTED') {
+        setShowRecoveryBanner(true);
+      }
+
+      // Check durable queue for unsynced events
+      try {
+        const queued = await getEventsBySession(sessionId, ['QUEUED', 'FAILED']);
+        setUnsyncedCount(queued.length);
+        if (queued.length > 0 && (sessionData.status === 'PAUSED' || sessionData.status === 'INTERRUPTED')) {
+          setShowRecoveryBanner(true);
+        }
+      } catch {}
 
       // Load session media manifest
       try {
@@ -211,10 +260,11 @@ export default function ConductorWorkspacePage() {
     }
   };
 
-  // 4. Dispatch Conductor Action with Idempotency Key
+  // 4. Dispatch Conductor Action with Idempotency Key & Durable Local Queue
   const handleAction = async (action: ConductorActionType, deltaSeconds?: number) => {
     if (!sessionId || !session) return;
     try {
+      setError(null);
       // Pre-flight check: if starting class, verify offline readiness or assets
       if (action === 'START' && manifest && manifest.assets.length > 0) {
         const check = await revalidateSessionReadiness(manifest);
@@ -228,18 +278,107 @@ export default function ConductorWorkspacePage() {
       }
 
       const eventUuid = generateUuid();
-      const updated = await client.sendConductorAction(sessionId, {
-        action,
-        clientEventUuid: eventUuid,
-        clientTimestamp: new Date().toISOString(),
-        currentStepIndex: session.currentStepIndex,
-        deltaSeconds,
-      });
-      setSession(updated);
+      const nowIso = new Date().toISOString();
+
+      // 1. Enqueue to durable local queue (IndexedDB)
+      try {
+        await enqueueConductorEvent(sessionId, session.sequenceVersionId, {
+          clientEventUuid: eventUuid,
+          eventType: actionToEventType(action),
+          stepOrder: session.currentStepIndex,
+          clientTimestamp: nowIso,
+          payload: { deltaSeconds, action },
+        });
+        const queued = await getEventsBySession(sessionId, ['QUEUED', 'FAILED']);
+        setUnsyncedCount(queued.length);
+      } catch (queueErr) {
+        console.warn('Local enqueue error:', queueErr);
+      }
+
+      // 2. Dispatch action live if online
+      if (isOnline) {
+        try {
+          const updated = await client.sendConductorAction(sessionId, {
+            action,
+            clientEventUuid: eventUuid,
+            clientTimestamp: nowIso,
+            currentStepIndex: session.currentStepIndex,
+            deltaSeconds,
+          });
+          setSession(updated);
+
+          // Mark event as synced in IndexedDB
+          try {
+            await updateEventsSyncStatus([eventUuid], 'SYNCED');
+            const remaining = await getEventsBySession(sessionId, ['QUEUED', 'FAILED']);
+            setUnsyncedCount(remaining.length);
+          } catch {}
+          return;
+        } catch (serverErr: any) {
+          console.warn('Action server sync deferred to offline queue:', serverErr.message);
+        }
+      }
     } catch (err: any) {
       setError(err.message || `Failed to execute action ${action}`);
     }
   };
+
+  // Manual & Reconnect Synchronization
+  const handleManualSync = useCallback(async () => {
+    if (!sessionId || !session || isSyncing) return;
+    setIsSyncing(true);
+    setSyncError(null);
+    try {
+      const result = await synchronizePendingEvents(
+        sessionId,
+        (batch) => client.syncConductorEvents(sessionId, batch),
+        {
+          currentStepIndex: session.currentStepIndex,
+          currentPhase: session.currentPhase,
+          completedStepsCount: session.completedStepsCount,
+          skippedStepsCount: session.skippedStepsCount,
+          totalElapsedSeconds: session.totalElapsedSeconds,
+          status: session.status,
+        }
+      );
+      if (result.serverState) {
+        setSession(result.serverState);
+      }
+      const remaining = await getEventsBySession(sessionId, ['QUEUED', 'FAILED']);
+      setUnsyncedCount(remaining.length);
+      if (result.error) {
+        setSyncError(result.error);
+      }
+    } catch (err: any) {
+      setSyncError(err.message || 'Sync failed');
+    } finally {
+      setIsSyncing(false);
+    }
+  }, [sessionId, session, isSyncing, client]);
+
+  // Explicit Session Recovery (Resume / Abandon)
+  const handleRecoverSession = async (action: 'RESUME' | 'ABANDON') => {
+    if (!sessionId) return;
+    try {
+      setError(null);
+      const eventUuid = generateUuid();
+      const updated = await client.recoverConductorSession(sessionId, {
+        action,
+        clientEventUuid: eventUuid,
+      });
+      setSession(updated);
+      setShowRecoveryBanner(false);
+    } catch (err: any) {
+      setError(err.message || `Failed to ${action.toLowerCase()} session`);
+    }
+  };
+
+  // Auto-sync when reconnecting online
+  useEffect(() => {
+    if (isOnline && unsyncedCount > 0) {
+      handleManualSync();
+    }
+  }, [isOnline, unsyncedCount, handleManualSync]);
 
   // 5. Load Local Offline Media Blobs for Active Step
   useEffect(() => {
@@ -488,25 +627,64 @@ export default function ConductorWorkspacePage() {
     );
   }
 
-  // Terminal Interrupted State View
-  if (session?.status === 'INTERRUPTED' || session?.status === 'INTERRUPTED_ABANDONED') {
+  // Terminal Interrupted Abandoned State View
+  if (session?.status === 'INTERRUPTED_ABANDONED') {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-stone-950 p-6 text-stone-100">
-        <div className="w-full max-w-lg rounded-3xl border border-amber-800 bg-stone-900 p-10 text-center shadow-2xl">
-          <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-amber-500/20 text-4xl">
+        <div className="w-full max-w-lg rounded-3xl border border-red-900 bg-stone-900 p-10 text-center shadow-2xl">
+          <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-red-500/20 text-4xl">
             ⏹️
           </div>
-          <h1 className="mt-6 text-2xl font-bold tracking-tight text-white">Class Interrupted</h1>
+          <h1 className="mt-6 text-2xl font-bold tracking-tight text-white">Class Concluded & Abandoned</h1>
           <p className="mt-2 text-sm text-stone-400">
-            {session.status === 'INTERRUPTED_ABANDONED'
-              ? 'This session was abandoned due to heartbeat timeout (> 30 mins).'
-              : 'This session was concluded early by the instructor.'}
+            This session is in a terminal abandoned state and cannot be resumed.
           </p>
           <div className="mt-6 text-xs text-stone-500 font-mono">
             Elapsed: {formatTime(session.totalElapsedSeconds)} • Steps: {session.completedStepsCount} completed
           </div>
           <div className="mt-8 flex justify-center gap-4">
             <Button onClick={() => router.push('/classes/schedule')}>Return to Schedule</Button>
+            <Button variant="outline" onClick={() => router.push('/conductor/history')}>
+              View History
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Interrupted State with Explicit Recovery Option
+  if (session?.status === 'INTERRUPTED') {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center bg-stone-950 p-6 text-stone-100">
+        <div className="w-full max-w-lg rounded-3xl border border-amber-800 bg-stone-900 p-10 text-center shadow-2xl">
+          <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-amber-500/20 text-4xl">
+            ⚠️
+          </div>
+          <h1 className="mt-6 text-2xl font-bold tracking-tight text-white">Class Interrupted</h1>
+          <p className="mt-2 text-sm text-stone-400">
+            This class was interrupted. You may resume conducting from step {(session.currentStepIndex ?? 0) + 1} or permanently abandon the session.
+          </p>
+          <div className="mt-6 text-xs text-stone-400 font-mono">
+            Elapsed: {formatTime(session.totalElapsedSeconds)} • Steps: {session.completedStepsCount} of {session.totalSteps} completed
+          </div>
+          <div className="mt-8 flex flex-col sm:flex-row justify-center gap-3">
+            <Button
+              className="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold"
+              onClick={() => handleRecoverSession('RESUME')}
+            >
+              Resume Class Now
+            </Button>
+            <Button
+              variant="outline"
+              className="border-red-700 text-red-300 hover:bg-red-950"
+              onClick={() => handleRecoverSession('ABANDON')}
+            >
+              Abandon Session
+            </Button>
+            <Button variant="ghost" onClick={() => router.push('/classes/schedule')}>
+              Exit
+            </Button>
           </div>
         </div>
       </div>
@@ -544,6 +722,35 @@ export default function ConductorWorkspacePage() {
             <span className={`h-2 w-2 rounded-full ${isOnline ? 'bg-emerald-400' : 'bg-amber-400 animate-pulse'}`} />
             {isOnline ? 'ONLINE' : 'OFFLINE MODE'}
           </div>
+
+          {/* Durable Queue Sync Pill */}
+          <button
+            onClick={handleManualSync}
+            disabled={isSyncing}
+            className={`flex items-center gap-1.5 rounded-full px-3 py-1 font-mono text-xs border transition ${
+              isSyncing
+                ? 'border-sky-700 bg-sky-950/80 text-sky-300 animate-pulse'
+                : unsyncedCount > 0
+                ? 'border-amber-600 bg-amber-950 text-amber-200 hover:bg-amber-900 cursor-pointer'
+                : 'border-emerald-800 bg-emerald-950/40 text-emerald-300'
+            }`}
+          >
+            {isSyncing ? (
+              <span>🔄 SYNCING...</span>
+            ) : unsyncedCount > 0 ? (
+              <span>⚠️ {unsyncedCount} UNSYNCED (SYNC)</span>
+            ) : (
+              <span>✓ SYNCED</span>
+            )}
+          </button>
+
+          {/* Session History Shortcut */}
+          <button
+            onClick={() => router.push('/conductor/history')}
+            className="hidden lg:inline-flex rounded-full border border-stone-800 px-3 py-1 text-xs text-stone-400 hover:bg-stone-900 hover:text-white"
+          >
+            📋 History
+          </button>
 
           {/* Offline Readiness Pill */}
           <button
@@ -585,6 +792,39 @@ export default function ConductorWorkspacePage() {
           </Badge>
         </div>
       </header>
+
+      {/* Recovery Banner for Paused / Unfinished State */}
+      {showRecoveryBanner && session && session.status === 'PAUSED' && (
+        <div className="bg-amber-950/90 border-b border-amber-700 px-6 py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-amber-200">
+          <div className="flex items-center gap-2">
+            <span>⚠️</span>
+            <span>
+              <strong>Unfinished Class Session:</strong> Session is paused at step {(session.currentStepIndex ?? 0) + 1} of {session.totalSteps}.
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs h-7 px-3"
+              onClick={() => handleAction('RESUME')}
+            >
+              Resume Class
+            </Button>
+            <Button
+              variant="outline"
+              className="border-red-700 text-red-300 hover:bg-red-950 text-xs h-7 px-3"
+              onClick={() => handleRecoverSession('ABANDON')}
+            >
+              Abandon Session
+            </Button>
+            <button
+              onClick={() => setShowRecoveryBanner(false)}
+              className="text-amber-400 hover:text-white px-2"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Progress Bar Across Screen */}
       <div className="h-1.5 w-full bg-stone-900">

@@ -21,6 +21,14 @@ import {
   ConductorSessionMediaManifest,
   ConductorManifestAsset,
   PrepareConductorSessionInput,
+  ConductorBatchSyncInput,
+  ConductorBatchSyncResponse,
+  ConductorRecoveryResponse,
+  ConductorRecoverSessionInput,
+  ConductorSessionHistoryFilter,
+  ConductorSessionHistoryResponse,
+  ConductorSessionHistoryItem,
+  ConductorExecutionEventDetail,
 } from '@yogaos/contracts';
 import { AuditService } from '../../common/services/audit.service.js';
 import {
@@ -802,6 +810,455 @@ export class ConductorService {
   }
 
   /**
+   * Idempotently ingest a batch of locally queued offline execution events.
+   */
+  async syncEvents(
+    tenantId: string,
+    sessionInstanceId: string,
+    input: ConductorBatchSyncInput,
+    userId: string,
+    userRole: UserRole
+  ): Promise<ConductorBatchSyncResponse> {
+    const { events, sessionStateSnapshot } = input;
+
+    // 1. Fetch ConductorSession with tenant isolation
+    const conductorSession = await prisma.conductorSession.findFirst({
+      where: { sessionInstanceId, tenantId },
+      include: {
+        sessionInstance: true,
+        sequenceVersion: {
+          include: {
+            sequence: true,
+            steps: {
+              include: STEP_MEDIA_INCLUDE,
+              orderBy: { stepOrder: 'asc' },
+            },
+          },
+        },
+      },
+    });
+
+    if (!conductorSession) {
+      throw new NotFoundException(`Conductor session for class instance '${sessionInstanceId}' not found.`);
+    }
+
+    // 2. Authorization: OWNER, MANAGER, or assigned INSTRUCTOR
+    if (
+      userRole === UserRole.INSTRUCTOR &&
+      conductorSession.conductorInstructorId !== userId &&
+      conductorSession.sessionInstance.instructorId !== userId
+    ) {
+      throw new ForbiddenException('Instructors can only sync their own class conductor sessions.');
+    }
+
+    // 3. Collect clientEventUuids and check existing events for idempotency
+    const eventUuids = events.map((e) => e.clientEventUuid);
+    const existingEvents = await prisma.conductorExecutionEvent.findMany({
+      where: { clientEventUuid: { in: eventUuids } },
+      select: { clientEventUuid: true },
+    });
+    const existingUuidSet = new Set(existingEvents.map((e) => e.clientEventUuid));
+
+    const alreadyProcessedEventUuids: string[] = [];
+    const newEventsToInsert: typeof events = [];
+
+    for (const evt of events) {
+      if (existingUuidSet.has(evt.clientEventUuid)) {
+        alreadyProcessedEventUuids.push(evt.clientEventUuid);
+      } else {
+        newEventsToInsert.push(evt);
+      }
+    }
+
+    // 4. Sanitize payloads: ensure student clinical health data never enters payloads
+    const sanitizedInserts = newEventsToInsert.map((e) => {
+      const payload = e.payload ? { ...e.payload } : {};
+      delete (payload as any).healthNotes;
+      delete (payload as any).medicalHistory;
+      delete (payload as any).injuries;
+      return {
+        tenantId,
+        conductorSessionId: conductorSession.id,
+        clientEventUuid: e.clientEventUuid,
+        eventType: e.eventType as ConductorEventType,
+        stepOrder: e.stepOrder ?? null,
+        clientTimestamp: new Date(e.clientTimestamp),
+        serverReceivedAt: new Date(),
+        payload: payload as any,
+        isOfflineSync: true,
+      };
+    });
+
+    // 5. Reconcile progress using ConductorStateMachine
+    const serverSnapshot = {
+      status: conductorSession.status,
+      currentStepIndex: conductorSession.currentStepIndex,
+      currentPhase: conductorSession.currentPhase,
+      totalElapsedSeconds: conductorSession.totalElapsedSeconds,
+      completedStepsCount: conductorSession.completedStepsCount,
+      skippedStepsCount: conductorSession.skippedStepsCount,
+      addedTimeSeconds: conductorSession.addedTimeSeconds,
+    };
+
+    const reconciled = ConductorStateMachine.reconcileProgress(
+      serverSnapshot,
+      sessionStateSnapshot
+    );
+
+    const now = new Date();
+
+    // 6. Execute in transaction
+    const updated = await prisma.$transaction(async (tx) => {
+      if (sanitizedInserts.length > 0) {
+        await tx.conductorExecutionEvent.createMany({
+          data: sanitizedInserts,
+          skipDuplicates: true,
+        });
+      }
+
+      const session = await tx.conductorSession.update({
+        where: { id: conductorSession.id },
+        data: {
+          status: reconciled.status,
+          currentStepIndex: reconciled.currentStepIndex,
+          currentPhase: reconciled.currentPhase,
+          completedStepsCount: reconciled.completedStepsCount,
+          skippedStepsCount: reconciled.skippedStepsCount,
+          totalElapsedSeconds: reconciled.totalElapsedSeconds,
+          addedTimeSeconds: reconciled.addedTimeSeconds,
+          lastSyncAt: now,
+          lastHeartbeatAt: now,
+        },
+        include: {
+          sequenceVersion: {
+            include: {
+              sequence: true,
+              steps: {
+                include: STEP_MEDIA_INCLUDE,
+                orderBy: { stepOrder: 'asc' },
+              },
+            },
+          },
+        },
+      });
+
+      return session;
+    });
+
+    const acknowledgedEventUuids = [
+      ...alreadyProcessedEventUuids,
+      ...newEventsToInsert.map((e) => e.clientEventUuid),
+    ];
+
+    await this.audit.log({
+      tenantId,
+      userId,
+      action: 'CONDUCTOR_EVENTS_SYNCED',
+      resourceType: 'CONDUCTOR_SESSION',
+      resourceId: conductorSession.id,
+      details: {
+        totalReceived: events.length,
+        newlyInserted: newEventsToInsert.length,
+        alreadyProcessed: alreadyProcessedEventUuids.length,
+      },
+    });
+
+    return {
+      acknowledgedEventUuids,
+      alreadyProcessedEventUuids,
+      failedEventUuids: [],
+      currentState: this.mapToState(updated),
+      syncedAt: now.toISOString(),
+    };
+  }
+
+  /**
+   * Get recovery diagnostic information for a conductor session.
+   */
+  async getRecoveryState(
+    tenantId: string,
+    sessionInstanceId: string,
+    userId: string,
+    userRole: UserRole
+  ): Promise<ConductorRecoveryResponse> {
+    const sessionState = await this.getSession(tenantId, sessionInstanceId, userId, userRole);
+
+    const isUnfinished =
+      sessionState.status === 'RUNNING' ||
+      sessionState.status === 'PAUSED' ||
+      sessionState.status === 'INTERRUPTED';
+
+    const isInterrupted = sessionState.status === 'INTERRUPTED';
+    const isAbandoned = sessionState.status === 'INTERRUPTED_ABANDONED';
+    const canResume = isUnfinished && !isAbandoned;
+
+    // Latest event
+    const lastEvent = await prisma.conductorExecutionEvent.findFirst({
+      where: { conductorSessionId: sessionState.id, tenantId },
+      orderBy: { clientTimestamp: 'desc' },
+      select: { clientTimestamp: true },
+    });
+
+    return {
+      session: sessionState,
+      isUnfinished,
+      isInterrupted,
+      isAbandoned,
+      canResume,
+      serverLastEventAt: lastEvent ? lastEvent.clientTimestamp.toISOString() : sessionState.lastHeartbeatAt,
+      lastSyncAt: sessionState.lastSyncAt,
+    };
+  }
+
+  /**
+   * Explicit instructor action to resume or abandon an interrupted or paused session.
+   */
+  async recoverSession(
+    tenantId: string,
+    sessionInstanceId: string,
+    input: ConductorRecoverSessionInput,
+    userId: string,
+    userRole: UserRole
+  ): Promise<ConductorSessionState> {
+    const { action, reason, clientEventUuid, clientTimestamp } = input;
+
+    const conductorSession = await prisma.conductorSession.findFirst({
+      where: { sessionInstanceId, tenantId },
+      include: {
+        sessionInstance: true,
+        sequenceVersion: {
+          include: {
+            sequence: true,
+            steps: {
+              include: STEP_MEDIA_INCLUDE,
+              orderBy: { stepOrder: 'asc' },
+            },
+          },
+        },
+      },
+    });
+
+    if (!conductorSession) {
+      throw new NotFoundException(`Conductor session for class instance '${sessionInstanceId}' not found.`);
+    }
+
+    if (
+      userRole === UserRole.INSTRUCTOR &&
+      conductorSession.conductorInstructorId !== userId &&
+      conductorSession.sessionInstance.instructorId !== userId
+    ) {
+      throw new ForbiddenException('Instructors can only recover their own class conductor sessions.');
+    }
+
+    // Terminal state invariant
+    if (ConductorStateMachine.isTerminal(conductorSession.status)) {
+      throw new BadRequestException(
+        `Cannot recover session in terminal state '${conductorSession.status}'.`
+      );
+    }
+
+    // Idempotency
+    const existing = await prisma.conductorExecutionEvent.findUnique({
+      where: { clientEventUuid },
+    });
+    if (existing) {
+      return this.mapToState(conductorSession);
+    }
+
+    const now = new Date();
+    const eventTime = clientTimestamp ? new Date(clientTimestamp) : now;
+    let newStatus: ConductorSessionStatus = conductorSession.status;
+    let eventType: ConductorEventType = 'SESSION_RECOVERED';
+
+    if (action === 'RESUME') {
+      ConductorStateMachine.assertValidTransition(conductorSession.status, 'RUNNING');
+      newStatus = 'RUNNING';
+      eventType = 'SESSION_RESUMED';
+    } else if (action === 'ABANDON') {
+      ConductorStateMachine.assertValidTransition(conductorSession.status, 'INTERRUPTED_ABANDONED');
+      newStatus = 'INTERRUPTED_ABANDONED';
+      eventType = 'SESSION_ABANDONED';
+    }
+
+    const updated = await prisma.$transaction(async (tx) => {
+      const session = await tx.conductorSession.update({
+        where: { id: conductorSession.id },
+        data: {
+          status: newStatus,
+          lastHeartbeatAt: now,
+          actualConcludedAt: newStatus === 'INTERRUPTED_ABANDONED' ? now : conductorSession.actualConcludedAt,
+        },
+        include: {
+          sequenceVersion: {
+            include: {
+              sequence: true,
+              steps: {
+                include: STEP_MEDIA_INCLUDE,
+                orderBy: { stepOrder: 'asc' },
+              },
+            },
+          },
+        },
+      });
+
+      await tx.conductorExecutionEvent.create({
+        data: {
+          tenantId,
+          conductorSessionId: conductorSession.id,
+          clientEventUuid,
+          eventType,
+          stepOrder: conductorSession.currentStepIndex,
+          clientTimestamp: eventTime,
+          payload: {
+            recoveryAction: action,
+            reason: reason || (action === 'RESUME' ? 'Instructor resumed session' : 'Instructor abandoned session'),
+          },
+        },
+      });
+
+      return session;
+    });
+
+    await this.audit.log({
+      tenantId,
+      userId,
+      action: action === 'RESUME' ? 'CONDUCTOR_SESSION_RECOVERED' : 'CONDUCTOR_SESSION_ABANDONED',
+      resourceType: 'CONDUCTOR_SESSION',
+      resourceId: conductorSession.id,
+      details: { reason },
+    });
+
+    return this.mapToState(updated);
+  }
+
+  /**
+   * Retrieve past conductor sessions with instructor/branch filtering.
+   */
+  async getSessionHistory(
+    tenantId: string,
+    filters: ConductorSessionHistoryFilter,
+    userId: string,
+    userRole: UserRole
+  ): Promise<ConductorSessionHistoryResponse> {
+    const where: any = { tenantId };
+
+    if (filters.status) {
+      where.status = filters.status;
+    }
+
+    // Role filtering: INSTRUCTOR sees only their own sessions
+    if (userRole === UserRole.INSTRUCTOR) {
+      where.conductorInstructorId = userId;
+    } else if (filters.instructorId) {
+      where.conductorInstructorId = filters.instructorId;
+    }
+
+    const [total, sessions] = await Promise.all([
+      prisma.conductorSession.count({ where }),
+      prisma.conductorSession.findMany({
+        where,
+        take: filters.limit,
+        skip: filters.offset,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          sessionInstance: {
+            include: {
+              branch: true,
+              room: true,
+            },
+          },
+          sequenceVersion: {
+            include: {
+              sequence: true,
+            },
+          },
+          conductorInstructor: {
+            select: {
+              id: true,
+              fullName: true,
+            },
+          },
+          _count: {
+            select: { events: true },
+          },
+        },
+      }),
+    ]);
+
+    const items: ConductorSessionHistoryItem[] = sessions.map((s) => ({
+      id: s.id,
+      sessionInstanceId: s.sessionInstanceId,
+      sequenceTitle: s.sequenceVersion?.sequence?.title || 'Yoga Sequence',
+      sequenceVersionId: s.sequenceVersionId,
+      instructorId: s.conductorInstructorId,
+      instructorName: s.conductorInstructor?.fullName || 'Instructor',
+      sessionDate: s.sessionInstance.sessionDate.toISOString(),
+      branchName: s.sessionInstance.branch?.name,
+      roomName: s.sessionInstance.room?.name,
+      status: s.status,
+      totalSteps: s.completedStepsCount + s.skippedStepsCount,
+      completedStepsCount: s.completedStepsCount,
+      skippedStepsCount: s.skippedStepsCount,
+      totalElapsedSeconds: s.totalElapsedSeconds,
+      actualStartedAt: s.actualStartedAt ? s.actualStartedAt.toISOString() : null,
+      actualConcludedAt: s.actualConcludedAt ? s.actualConcludedAt.toISOString() : null,
+      lastSyncAt: s.lastSyncAt ? s.lastSyncAt.toISOString() : null,
+      eventsCount: s._count.events,
+      createdAt: s.createdAt.toISOString(),
+    }));
+
+    return {
+      items,
+      total,
+      limit: filters.limit,
+      offset: filters.offset,
+    };
+  }
+
+  /**
+   * Retrieve execution events timeline for an authorized session.
+   */
+  async getSessionEvents(
+    tenantId: string,
+    sessionInstanceId: string,
+    userId: string,
+    userRole: UserRole
+  ): Promise<ConductorExecutionEventDetail[]> {
+    const conductorSession = await prisma.conductorSession.findFirst({
+      where: { sessionInstanceId, tenantId },
+      include: { sessionInstance: true },
+    });
+
+    if (!conductorSession) {
+      throw new NotFoundException(`Conductor session for class instance '${sessionInstanceId}' not found.`);
+    }
+
+    if (
+      userRole === UserRole.INSTRUCTOR &&
+      conductorSession.conductorInstructorId !== userId &&
+      conductorSession.sessionInstance.instructorId !== userId
+    ) {
+      throw new ForbiddenException('Instructors can only view events for their own class conductor sessions.');
+    }
+
+    const events = await prisma.conductorExecutionEvent.findMany({
+      where: { conductorSessionId: conductorSession.id, tenantId },
+      orderBy: { clientTimestamp: 'asc' },
+    });
+
+    return events.map((e) => ({
+      id: e.id,
+      clientEventUuid: e.clientEventUuid,
+      eventType: e.eventType,
+      stepOrder: e.stepOrder,
+      clientTimestamp: e.clientTimestamp.toISOString(),
+      serverReceivedAt: e.serverReceivedAt.toISOString(),
+      payload: (e.payload as Record<string, unknown>) || null,
+      isOfflineSync: e.isOfflineSync,
+    }));
+  }
+
+  /**
    * Helper: Map Prisma steps to ConductorStepView.
    */
   private mapSteps(steps: any[]): ConductorStepView[] {
@@ -865,6 +1322,7 @@ export class ConductorService {
       actualStartedAt: session.actualStartedAt ? session.actualStartedAt.toISOString() : null,
       actualConcludedAt: session.actualConcludedAt ? session.actualConcludedAt.toISOString() : null,
       lastHeartbeatAt: session.lastHeartbeatAt ? session.lastHeartbeatAt.toISOString() : null,
+      lastSyncAt: session.lastSyncAt ? session.lastSyncAt.toISOString() : null,
       currentStep,
       nextStep,
       steps,

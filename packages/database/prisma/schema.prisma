@@ -1414,6 +1414,8 @@ enum ConductorEventType {
   SESSION_COMPLETED
   SESSION_INTERRUPTED
   SESSION_ABANDONED
+  SESSION_RECOVERED
+  OFFLINE_SYNC_COMPLETED
   MEDIA_PLAYBACK_STARTED
   MEDIA_PLAYBACK_ERROR
 }
@@ -1438,6 +1440,7 @@ model ConductorSession {
   addedTimeSeconds       Int                    @default(0)
   clientSessionUuid      String
   lastHeartbeatAt        DateTime?
+  lastSyncAt             DateTime?
   createdAt              DateTime               @default(now())
   updatedAt              DateTime               @updatedAt
 
@@ -1462,6 +1465,7 @@ model ConductorExecutionEvent {
   clientTimestamp    DateTime
   serverReceivedAt   DateTime           @default(now())
   payload            Json?
+  isOfflineSync      Boolean            @default(false)
   createdAt          DateTime           @default(now())
 
   organization     Organization     @relation(fields: [tenantId], references: [id], onDelete: Cascade)

@@ -109,6 +109,13 @@ import {
   ConductorSessionState,
   ConductorSessionMediaManifest,
   PrepareConductorSessionInput,
+  ConductorBatchSyncInput,
+  ConductorBatchSyncResponse,
+  ConductorRecoveryResponse,
+  ConductorRecoverSessionInput,
+  ConductorSessionHistoryFilter,
+  ConductorSessionHistoryResponse,
+  ConductorExecutionEventDetail,
 } from '@yogaos/contracts';
 
 export interface ApiClientOptions {
@@ -1085,6 +1092,49 @@ export class ApiClient {
       method: 'POST',
       body: JSON.stringify(data),
     });
+  }
+
+  // --------------------------------------------------------------------------
+  // P18: Recovery, Event Sync & Session History
+  // --------------------------------------------------------------------------
+  async syncConductorEvents(
+    sessionInstanceId: string,
+    data: ConductorBatchSyncInput
+  ): Promise<ConductorBatchSyncResponse> {
+    return this.request<ConductorBatchSyncResponse>(`/conductor/sessions/${sessionInstanceId}/events/sync`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getConductorRecoveryState(sessionInstanceId: string): Promise<ConductorRecoveryResponse> {
+    return this.request<ConductorRecoveryResponse>(`/conductor/sessions/${sessionInstanceId}/recovery`);
+  }
+
+  async recoverConductorSession(
+    sessionInstanceId: string,
+    data: ConductorRecoverSessionInput
+  ): Promise<ConductorSessionState> {
+    return this.request<ConductorSessionState>(`/conductor/sessions/${sessionInstanceId}/recover`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getConductorSessionHistory(
+    query?: ConductorSessionHistoryFilter
+  ): Promise<ConductorSessionHistoryResponse> {
+    const params = new URLSearchParams();
+    if (query?.status) params.set('status', query.status);
+    if (query?.instructorId) params.set('instructorId', query.instructorId);
+    if (query?.limit !== undefined) params.set('limit', String(query.limit));
+    if (query?.offset !== undefined) params.set('offset', String(query.offset));
+    const qs = params.toString() ? `?${params.toString()}` : '';
+    return this.request<ConductorSessionHistoryResponse>(`/conductor/history${qs}`);
+  }
+
+  async getConductorSessionEvents(sessionInstanceId: string): Promise<ConductorExecutionEventDetail[]> {
+    return this.request<ConductorExecutionEventDetail[]>(`/conductor/sessions/${sessionInstanceId}/events`);
   }
 }
 

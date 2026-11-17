@@ -35,10 +35,77 @@ export class ConductorStateMachine {
     OFFLINE_READY: ['RUNNING', 'READY', 'INTERRUPTED', 'INTERRUPTED_ABANDONED'],
     RUNNING: ['PAUSED', 'COMPLETED', 'INTERRUPTED', 'INTERRUPTED_ABANDONED'],
     PAUSED: ['RUNNING', 'COMPLETED', 'INTERRUPTED', 'INTERRUPTED_ABANDONED'],
-    INTERRUPTED: ['INTERRUPTED_ABANDONED'],
+    INTERRUPTED: ['RUNNING', 'PAUSED', 'INTERRUPTED_ABANDONED'],
     COMPLETED: [], // Terminal
     INTERRUPTED_ABANDONED: [], // Terminal
   };
+
+  /**
+   * Reconcile local state with server state.
+   * Asserts valid transition invariants and prevents illegal automatic completions.
+   */
+  public static reconcileProgress(
+    serverSnapshot: ConductorRuntimeSnapshot,
+    localSnapshot?: Partial<ConductorRuntimeSnapshot>
+  ): ConductorRuntimeSnapshot {
+    if (!localSnapshot) {
+      return serverSnapshot;
+    }
+
+    // Invariant: Terminal server states cannot be revived by client snapshots
+    if (this.isTerminal(serverSnapshot.status)) {
+      return serverSnapshot;
+    }
+
+    // Invariant: Never allow client to silently mark paused, interrupted, or abandoned sessions as COMPLETED
+    let resolvedStatus = serverSnapshot.status;
+    if (localSnapshot.status && localSnapshot.status !== serverSnapshot.status) {
+      if (
+        (serverSnapshot.status === 'PAUSED' ||
+          serverSnapshot.status === 'INTERRUPTED' ||
+          serverSnapshot.status === 'INTERRUPTED_ABANDONED') &&
+        localSnapshot.status === 'COMPLETED'
+      ) {
+        // Disallow automatic transition to COMPLETED
+        resolvedStatus = serverSnapshot.status;
+      } else if (this.isValidTransition(serverSnapshot.status, localSnapshot.status)) {
+        resolvedStatus = localSnapshot.status;
+      }
+    }
+
+    // Advance forward monotonically
+    const currentStepIndex = Math.max(
+      serverSnapshot.currentStepIndex,
+      localSnapshot.currentStepIndex ?? serverSnapshot.currentStepIndex
+    );
+    const completedStepsCount = Math.max(
+      serverSnapshot.completedStepsCount,
+      localSnapshot.completedStepsCount ?? serverSnapshot.completedStepsCount
+    );
+    const skippedStepsCount = Math.max(
+      serverSnapshot.skippedStepsCount,
+      localSnapshot.skippedStepsCount ?? serverSnapshot.skippedStepsCount
+    );
+    const totalElapsedSeconds = Math.max(
+      serverSnapshot.totalElapsedSeconds,
+      localSnapshot.totalElapsedSeconds ?? serverSnapshot.totalElapsedSeconds
+    );
+    const addedTimeSeconds = Math.max(
+      serverSnapshot.addedTimeSeconds,
+      localSnapshot.addedTimeSeconds ?? serverSnapshot.addedTimeSeconds
+    );
+    const currentPhase = localSnapshot.currentPhase ?? serverSnapshot.currentPhase;
+
+    return {
+      status: resolvedStatus,
+      currentStepIndex,
+      currentPhase,
+      totalElapsedSeconds,
+      completedStepsCount,
+      skippedStepsCount,
+      addedTimeSeconds,
+    };
+  }
 
   /**
    * Validates if transition from `from` to `to` is allowed.
