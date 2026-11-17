@@ -107,6 +107,8 @@ import {
   InitConductorSessionInput,
   ConductorActionInput,
   ConductorSessionState,
+  ConductorSessionMediaManifest,
+  PrepareConductorSessionInput,
 } from '@yogaos/contracts';
 
 export interface ApiClientOptions {
@@ -1065,6 +1067,23 @@ export class ApiClient {
     return this.request<ConductorSessionState>(`/conductor/sessions/${sessionInstanceId}/action`, {
       method: 'POST',
       body: JSON.stringify(action),
+    });
+  }
+
+  // --------------------------------------------------------------------------
+  // P17: Offline-First Media Manifest & Preparation
+  // --------------------------------------------------------------------------
+  async getConductorMediaManifest(sessionInstanceId: string): Promise<ConductorSessionMediaManifest> {
+    return this.request<ConductorSessionMediaManifest>(`/conductor/sessions/${sessionInstanceId}/media-manifest`);
+  }
+
+  async submitConductorPreparation(
+    sessionInstanceId: string,
+    data: PrepareConductorSessionInput
+  ): Promise<ConductorSessionState> {
+    return this.request<ConductorSessionState>(`/conductor/sessions/${sessionInstanceId}/prepare`, {
+      method: 'POST',
+      body: JSON.stringify(data),
     });
   }
 }

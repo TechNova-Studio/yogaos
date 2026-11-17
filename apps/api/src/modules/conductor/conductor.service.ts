@@ -17,6 +17,10 @@ import {
   ConductorActionInput,
   ConductorSessionState,
   ConductorStepView,
+  ConductorContentMode,
+  ConductorSessionMediaManifest,
+  ConductorManifestAsset,
+  PrepareConductorSessionInput,
 } from '@yogaos/contracts';
 import { AuditService } from '../../common/services/audit.service.js';
 import {
@@ -25,6 +29,32 @@ import {
   TerminalStateError,
 } from './conductor-state-machine.js';
 import { randomUUID } from 'crypto';
+
+function determineContentMode(step: any): ConductorContentMode {
+  if (step.demoVideoMedia || step.demoVideoMediaId) {
+    return 'VIDEO';
+  }
+  if (
+    (step.referenceImageMedia || step.referenceImageMediaId) &&
+    (step.voiceAudioMedia || step.voiceAudioMediaId)
+  ) {
+    return 'IMAGE_WITH_VOICE';
+  }
+  if (step.referenceImageMedia || step.referenceImageMediaId) {
+    return 'IMAGE';
+  }
+  if (step.voiceAudioMedia || step.voiceAudioMediaId) {
+    return 'AUDIO_ONLY';
+  }
+  return 'NONE';
+}
+
+const STEP_MEDIA_INCLUDE = {
+  asana: true,
+  voiceAudioMedia: true,
+  demoVideoMedia: true,
+  referenceImageMedia: true,
+};
 
 @Injectable()
 export class ConductorService {
@@ -49,7 +79,7 @@ export class ConductorService {
           include: {
             sequence: true,
             steps: {
-              include: { asana: true },
+              include: STEP_MEDIA_INCLUDE,
               orderBy: { stepOrder: 'asc' },
             },
           },
@@ -78,7 +108,7 @@ export class ConductorService {
           include: {
             sequence: true,
             steps: {
-              include: { asana: true },
+              include: STEP_MEDIA_INCLUDE,
               orderBy: { stepOrder: 'asc' },
             },
           },
@@ -102,7 +132,7 @@ export class ConductorService {
       include: {
         sequence: true,
         steps: {
-          include: { asana: true },
+          include: STEP_MEDIA_INCLUDE,
           orderBy: { stepOrder: 'asc' },
         },
       },
@@ -138,7 +168,7 @@ export class ConductorService {
             include: {
               sequence: true,
               steps: {
-                include: { asana: true },
+                include: STEP_MEDIA_INCLUDE,
                 orderBy: { stepOrder: 'asc' },
               },
             },
@@ -193,7 +223,7 @@ export class ConductorService {
           include: {
             sequence: true,
             steps: {
-              include: { asana: true },
+              include: STEP_MEDIA_INCLUDE,
               orderBy: { stepOrder: 'asc' },
             },
           },
@@ -218,6 +248,252 @@ export class ConductorService {
   }
 
   /**
+   * Resolve immutable media manifest for a conductor session.
+   */
+  async getMediaManifest(
+    tenantId: string,
+    sessionInstanceId: string,
+    userId: string,
+    userRole: UserRole
+  ): Promise<ConductorSessionMediaManifest> {
+    // 1. Fetch ClassSessionInstance with tenant check
+    const sessionInstance = await prisma.classSessionInstance.findFirst({
+      where: { id: sessionInstanceId, tenantId },
+      include: {
+        conductorSession: true,
+        attachedSequenceVersion: {
+          include: {
+            sequence: true,
+            steps: {
+              include: STEP_MEDIA_INCLUDE,
+              orderBy: { stepOrder: 'asc' },
+            },
+          },
+        },
+      },
+    });
+
+    if (!sessionInstance) {
+      throw new NotFoundException(`Class session instance '${sessionInstanceId}' not found.`);
+    }
+
+    // 2. Authorization
+    if (
+      userRole === UserRole.INSTRUCTOR &&
+      sessionInstance.instructorId !== userId &&
+      sessionInstance.conductorSession?.conductorInstructorId !== userId
+    ) {
+      throw new ForbiddenException('Instructors can only access media manifests for their assigned sessions.');
+    }
+
+    // 3. Resolve attached sequence version
+    const version = sessionInstance.attachedSequenceVersion;
+    if (!version) {
+      throw new BadRequestException('No sequence attached to this session instance.');
+    }
+
+    // 4. Resolve and validate all media assets
+    const assetMap = new Map<string, ConductorManifestAsset>();
+
+    for (const step of version.steps) {
+      const mode = determineContentMode(step);
+      const mediaRefs = [
+        { media: step.demoVideoMedia, refId: step.demoVideoMediaId },
+        { media: step.referenceImageMedia, refId: step.referenceImageMediaId },
+        { media: step.voiceAudioMedia, refId: step.voiceAudioMediaId },
+      ];
+
+      for (const { media, refId } of mediaRefs) {
+        if (!refId) continue;
+
+        if (!media) {
+          throw new BadRequestException(`Media reference '${refId}' on step #${step.stepOrder} could not be resolved.`);
+        }
+
+        if (media.deletedAt !== null || media.isArchived) {
+          throw new BadRequestException(`Media asset '${media.id}' on step #${step.stepOrder} is deleted or archived.`);
+        }
+
+        // Cross-tenant verification
+        if (media.tenantId !== null && media.tenantId !== tenantId) {
+          throw new ForbiddenException(`Cross-tenant media access denied for asset '${media.id}'.`);
+        }
+
+        if (!media.sha256Hash) {
+          throw new BadRequestException(`Media asset '${media.id}' is missing required SHA-256 integrity checksum.`);
+        }
+
+        if (!assetMap.has(media.id)) {
+          assetMap.set(media.id, {
+            assetId: media.id,
+            title: media.title,
+            fileName: media.fileName,
+            mediaType: media.mediaType as any,
+            mimeType: media.mimeType,
+            fileSize: media.fileSize,
+            sha256Hash: media.sha256Hash,
+            url: media.url,
+            thumbnailUrl: media.thumbnailUrl,
+            durationSeconds: media.durationSeconds,
+            stepOrders: [step.stepOrder],
+            contentMode: mode,
+          });
+        } else {
+          const existing = assetMap.get(media.id)!;
+          if (!existing.stepOrders.includes(step.stepOrder)) {
+            existing.stepOrders.push(step.stepOrder);
+          }
+        }
+      }
+    }
+
+    const assets = Array.from(assetMap.values());
+    const totalBytes = assets.reduce((sum, a) => sum + a.fileSize, 0);
+
+    return {
+      sessionInstanceId,
+      sequenceVersionId: version.id,
+      sequenceTitle: version.sequence.title,
+      totalAssetsCount: assets.length,
+      totalBytes,
+      assets,
+    };
+  }
+
+  /**
+   * Submit offline preparation and integrity verification status.
+   */
+  async submitPreparation(
+    tenantId: string,
+    sessionInstanceId: string,
+    input: PrepareConductorSessionInput,
+    userId: string,
+    userRole: UserRole
+  ): Promise<ConductorSessionState> {
+    const { clientEventUuid, status, verifiedAssetsCount, totalBytesVerified, verificationErrors, storageAvailableBytes } = input;
+
+    // 1. Fetch ConductorSession
+    const conductorSession = await prisma.conductorSession.findFirst({
+      where: { sessionInstanceId, tenantId },
+      include: {
+        sessionInstance: true,
+        sequenceVersion: {
+          include: {
+            sequence: true,
+            steps: {
+              include: STEP_MEDIA_INCLUDE,
+              orderBy: { stepOrder: 'asc' },
+            },
+          },
+        },
+      },
+    });
+
+    if (!conductorSession) {
+      throw new NotFoundException(`Conductor session for class instance '${sessionInstanceId}' not found.`);
+    }
+
+    // 2. Authorization
+    if (
+      userRole === UserRole.INSTRUCTOR &&
+      conductorSession.conductorInstructorId !== userId &&
+      conductorSession.sessionInstance.instructorId !== userId
+    ) {
+      throw new ForbiddenException('Instructors can only prepare their own class sessions.');
+    }
+
+    // 3. Idempotency Check
+    const existingEvent = await prisma.conductorExecutionEvent.findUnique({
+      where: { clientEventUuid },
+    });
+
+    if (existingEvent) {
+      return this.mapToState(conductorSession);
+    }
+
+    // 4. Validation & State Machine Updates
+    const now = new Date();
+    let newStatus = conductorSession.status;
+    let isOfflineReady = conductorSession.isOfflineReady;
+    let offlinePreparedAt = conductorSession.offlinePreparedAt;
+    let eventType: ConductorEventType = 'OFFLINE_PREPARATION_STARTED';
+
+    if (status === 'OFFLINE_READY') {
+      if (verificationErrors && verificationErrors.length > 0) {
+        throw new BadRequestException('Cannot mark session OFFLINE_READY with active verification errors.');
+      }
+
+      // Assert transition from READY (or existing OFFLINE_READY)
+      ConductorStateMachine.assertValidTransition(conductorSession.status, 'OFFLINE_READY');
+      newStatus = 'OFFLINE_READY';
+      isOfflineReady = true;
+      offlinePreparedAt = now;
+      eventType = 'OFFLINE_READY';
+    } else if (status === 'VERIFICATION_FAILED') {
+      isOfflineReady = false;
+      eventType = 'OFFLINE_VERIFICATION_FAILED';
+    } else {
+      eventType = 'OFFLINE_PREPARATION_STARTED';
+    }
+
+    const metadata = {
+      status,
+      verifiedAssetsCount: verifiedAssetsCount ?? 0,
+      totalBytesVerified: totalBytesVerified ?? 0,
+      storageAvailableBytes: storageAvailableBytes ?? null,
+      verificationErrors: verificationErrors ?? [],
+      recordedAt: now.toISOString(),
+    };
+
+    const updated = await prisma.$transaction(async (tx) => {
+      const session = await tx.conductorSession.update({
+        where: { id: conductorSession.id },
+        data: {
+          status: newStatus,
+          isOfflineReady,
+          offlinePreparedAt,
+          preparationMetadata: metadata,
+        },
+        include: {
+          sequenceVersion: {
+            include: {
+              sequence: true,
+              steps: {
+                include: STEP_MEDIA_INCLUDE,
+                orderBy: { stepOrder: 'asc' },
+              },
+            },
+          },
+        },
+      });
+
+      await tx.conductorExecutionEvent.create({
+        data: {
+          tenantId,
+          conductorSessionId: conductorSession.id,
+          clientEventUuid,
+          eventType,
+          stepOrder: conductorSession.currentStepIndex,
+          clientTimestamp: input.clientTimestamp ? new Date(input.clientTimestamp) : now,
+          payload: metadata,
+        },
+      });
+
+      return session;
+    });
+
+    await this.audit.log({
+      tenantId,
+      userId,
+      action: `CONDUCTOR_PREPARATION_${status}`,
+      resourceType: 'CONDUCTOR_SESSION',
+      resourceId: updated.id,
+    });
+
+    return this.mapToState(updated);
+  }
+
+  /**
    * Execute an instructor action (START, PAUSE, RESUME, NEXT, PREVIOUS, SKIP, ADJUST_TIME, END_SESSION, HEARTBEAT).
    */
   async executeAction(
@@ -238,7 +514,7 @@ export class ConductorService {
           include: {
             sequence: true,
             steps: {
-              include: { asana: true },
+              include: STEP_MEDIA_INCLUDE,
               orderBy: { stepOrder: 'asc' },
             },
           },
@@ -265,7 +541,6 @@ export class ConductorService {
     });
 
     if (existingEvent) {
-      // Event already processed; return current state idempotently
       return this.mapToState(conductorSession);
     }
 
@@ -319,7 +594,6 @@ export class ConductorService {
           throw new BadRequestException(`Cannot advance step while session is in '${conductorSession.status}' state.`);
         }
 
-        // Monotonic check: prevent double tap skips if clientStepIndex is supplied and doesn't match
         if (clientStepIndex !== undefined && clientStepIndex !== conductorSession.currentStepIndex) {
           return this.mapToState(conductorSession);
         }
@@ -390,8 +664,6 @@ export class ConductorService {
       }
 
       case 'END_SESSION': {
-        // Paused/abandoned sessions are NEVER automatically marked COMPLETED.
-        // If explicitly ending and all steps were completed, COMPLETED; otherwise INTERRUPTED.
         const allStepsCompleted = newCompletedSteps + newSkippedSteps >= steps.length;
         newStatus = allStepsCompleted ? 'COMPLETED' : 'INTERRUPTED';
         ConductorStateMachine.assertValidTransition(conductorSession.status, newStatus);
@@ -401,8 +673,7 @@ export class ConductorService {
       }
 
       case 'HEARTBEAT': {
-        // No status change, just update heartbeat
-        eventType = 'SESSION_STARTED'; // Generic pulse or keep status
+        eventType = 'SESSION_STARTED';
         break;
       }
 
@@ -410,14 +681,14 @@ export class ConductorService {
         throw new BadRequestException(`Unknown conductor action: ${action}`);
     }
 
-    // 6. Elapsed time calculation with wall clock anchoring
+    // 6. Elapsed time calculation
     let totalElapsedSeconds = conductorSession.totalElapsedSeconds;
     if (actualStartedAt && (newStatus === 'RUNNING' || newStatus === 'COMPLETED' || newStatus === 'INTERRUPTED')) {
       const wallClockElapsed = Math.floor((now.getTime() - actualStartedAt.getTime()) / 1000) + newAddedTime;
       totalElapsedSeconds = Math.max(totalElapsedSeconds, Math.max(0, wallClockElapsed));
     }
 
-    // 7. Atomic Transaction: Update ConductorSession & Write Event
+    // 7. Atomic Transaction
     const updated = await prisma.$transaction(async (tx) => {
       const session = await tx.conductorSession.update({
         where: { id: conductorSession.id },
@@ -438,7 +709,7 @@ export class ConductorService {
             include: {
               sequence: true,
               steps: {
-                include: { asana: true },
+                include: STEP_MEDIA_INCLUDE,
                 orderBy: { stepOrder: 'asc' },
               },
             },
@@ -493,7 +764,7 @@ export class ConductorService {
     const staleSessions = await prisma.conductorSession.findMany({
       where: {
         tenantId,
-        status: { in: ['READY', 'RUNNING', 'PAUSED'] },
+        status: { in: ['READY', 'OFFLINE_READY', 'RUNNING', 'PAUSED'] },
         OR: [
           { lastHeartbeatAt: { lt: cutoff } },
           { lastHeartbeatAt: null, updatedAt: { lt: cutoff } },
@@ -534,25 +805,35 @@ export class ConductorService {
    * Helper: Map Prisma steps to ConductorStepView.
    */
   private mapSteps(steps: any[]): ConductorStepView[] {
-    return steps.map((s) => ({
-      id: s.id,
-      stepOrder: s.stepOrder,
-      asanaId: s.asanaId,
-      asanaName: s.asanaNameSnapshot || s.asana?.englishName || 'Unnamed Asana',
-      sanskritName: s.sanskritNameSnapshot || s.asana?.sanskritNameIast || '',
-      executionMode: s.executionMode,
-      durationSeconds: s.durationSeconds,
-      repetitionCount: s.repetitionCount,
-      isBilateral: s.isBilateral,
-      side: s.side,
-      restIntervalSeconds: s.restIntervalSeconds,
-      teacherNotes: s.teacherNotes,
-      cues: s.cues,
-      transitionNotes: s.transitionNotes,
-      referenceImageMediaId: s.referenceImageMediaId,
-      voiceAudioMediaId: s.voiceAudioMediaId,
-      demoVideoMediaId: s.demoVideoMediaId,
-    }));
+    return steps.map((s) => {
+      const mode = determineContentMode(s);
+      return {
+        id: s.id,
+        stepOrder: s.stepOrder,
+        asanaId: s.asanaId,
+        asanaName: s.asanaNameSnapshot || s.asana?.englishName || 'Unnamed Asana',
+        sanskritName: s.sanskritNameSnapshot || s.asana?.sanskritNameIast || '',
+        executionMode: s.executionMode,
+        durationSeconds: s.durationSeconds,
+        repetitionCount: s.repetitionCount,
+        isBilateral: s.isBilateral,
+        side: s.side,
+        restIntervalSeconds: s.restIntervalSeconds,
+        teacherNotes: s.teacherNotes,
+        cues: s.cues,
+        transitionNotes: s.transitionNotes,
+        contentMode: mode,
+        referenceImageMediaId: s.referenceImageMediaId,
+        voiceAudioMediaId: s.voiceAudioMediaId,
+        demoVideoMediaId: s.demoVideoMediaId,
+        referenceImageUrl: s.referenceImageMedia?.url ?? null,
+        voiceAudioUrl: s.voiceAudioMedia?.url ?? null,
+        demoVideoUrl: s.demoVideoMedia?.url ?? null,
+        referenceImageHash: s.referenceImageMedia?.sha256Hash ?? null,
+        voiceAudioHash: s.voiceAudioMedia?.sha256Hash ?? null,
+        demoVideoHash: s.demoVideoMedia?.sha256Hash ?? null,
+      };
+    });
   }
 
   /**
@@ -578,6 +859,9 @@ export class ConductorService {
       completedStepsCount: session.completedStepsCount,
       skippedStepsCount: session.skippedStepsCount,
       addedTimeSeconds: session.addedTimeSeconds,
+      isOfflineReady: session.isOfflineReady ?? false,
+      offlinePreparedAt: session.offlinePreparedAt ? session.offlinePreparedAt.toISOString() : null,
+      preparationMetadata: session.preparationMetadata ?? null,
       actualStartedAt: session.actualStartedAt ? session.actualStartedAt.toISOString() : null,
       actualConcludedAt: session.actualConcludedAt ? session.actualConcludedAt.toISOString() : null,
       lastHeartbeatAt: session.lastHeartbeatAt ? session.lastHeartbeatAt.toISOString() : null,

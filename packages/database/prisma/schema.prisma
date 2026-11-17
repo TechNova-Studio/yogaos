@@ -1377,11 +1377,12 @@ model SequenceStep {
 }
 
 // ----------------------------------------------------------------------------
-// P16: Automated Class Conductor Runtime Engine
+// P16 & P17: Automated Class Conductor Runtime Engine & Offline-First Playback
 // ----------------------------------------------------------------------------
 
 enum ConductorSessionStatus {
   READY
+  OFFLINE_READY
   RUNNING
   PAUSED
   COMPLETED
@@ -1399,6 +1400,9 @@ enum ConductorStepPhase {
 
 enum ConductorEventType {
   SESSION_INITIALIZED
+  OFFLINE_PREPARATION_STARTED
+  OFFLINE_READY
+  OFFLINE_VERIFICATION_FAILED
   SESSION_STARTED
   STEP_STARTED
   STEP_COMPLETED
@@ -1410,6 +1414,8 @@ enum ConductorEventType {
   SESSION_COMPLETED
   SESSION_INTERRUPTED
   SESSION_ABANDONED
+  MEDIA_PLAYBACK_STARTED
+  MEDIA_PLAYBACK_ERROR
 }
 
 model ConductorSession {
@@ -1421,6 +1427,9 @@ model ConductorSession {
   status                 ConductorSessionStatus @default(READY)
   currentStepIndex       Int                    @default(0)
   currentPhase           ConductorStepPhase     @default(POSTURE_HOLD)
+  isOfflineReady         Boolean                @default(false)
+  offlinePreparedAt      DateTime?
+  preparationMetadata    Json?
   actualStartedAt        DateTime?
   actualConcludedAt      DateTime?
   totalElapsedSeconds    Int                    @default(0)

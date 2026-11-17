@@ -10,6 +10,7 @@ import {
 import {
   InitConductorSessionSchema,
   ConductorActionSchema,
+  PrepareConductorSessionSchema,
 } from '@yogaos/contracts';
 import { ConductorService } from './conductor.service.js';
 import { AuthGuard } from '../../common/guards/auth.guard.js';
@@ -57,6 +58,53 @@ export class ConductorController {
     const session = await this.conductorService.getSession(
       user.activeTenantId,
       sessionInstanceId,
+      user.id,
+      user.activeRole!
+    );
+    return {
+      success: true,
+      data: session,
+      timestamp: new Date().toISOString(),
+    };
+  }
+
+  @Get('sessions/:sessionInstanceId/media-manifest')
+  @RequireRoles('OWNER', 'MANAGER', 'INSTRUCTOR')
+  async getMediaManifest(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('sessionInstanceId') sessionInstanceId: string
+  ) {
+    if (!user.activeTenantId) {
+      throw new BadRequestException('Organization context is required.');
+    }
+    const manifest = await this.conductorService.getMediaManifest(
+      user.activeTenantId,
+      sessionInstanceId,
+      user.id,
+      user.activeRole!
+    );
+    return {
+      success: true,
+      data: manifest,
+      timestamp: new Date().toISOString(),
+    };
+  }
+
+  @Post('sessions/:sessionInstanceId/prepare')
+  @RequireRoles('OWNER', 'MANAGER', 'INSTRUCTOR')
+  async submitPreparation(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('sessionInstanceId') sessionInstanceId: string,
+    @Body() body: unknown
+  ) {
+    if (!user.activeTenantId) {
+      throw new BadRequestException('Organization context is required.');
+    }
+    const validated = PrepareConductorSessionSchema.parse(body);
+    const session = await this.conductorService.submitPreparation(
+      user.activeTenantId,
+      sessionInstanceId,
+      validated,
       user.id,
       user.activeRole!
     );
