@@ -87,6 +87,27 @@ export class RemindersController {
     };
   }
 
+  @Post(':id/retry')
+  @RequireRoles('OWNER', 'MANAGER', 'RECEPTIONIST')
+  async retry(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string
+  ) {
+    if (!user.activeTenantId) {
+      throw new BadRequestException('No active organization context selected');
+    }
+    const result = await this.remindersService.retryReminder(
+      user.activeTenantId,
+      id,
+      user.id
+    );
+    return {
+      success: true,
+      data: result,
+      timestamp: new Date().toISOString(),
+    };
+  }
+
   @Post('scan')
   @RequireRoles('OWNER', 'MANAGER')
   async triggerScan(@CurrentUser() user: AuthenticatedUser) {

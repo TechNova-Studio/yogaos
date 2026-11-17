@@ -172,6 +172,55 @@ export class RemindersService {
     return updated;
   }
 
+  async retryReminder(
+    tenantId: string,
+    reminderId: string,
+    userId?: string
+  ) {
+    const reminder = await prisma.billingReminder.findFirst({
+      where: { id: reminderId, tenantId },
+    });
+
+    if (!reminder) {
+      throw new NotFoundException(`Reminder ${reminderId} not found`);
+    }
+
+    const currentMeta = (reminder.metadata as Record<string, any>) || {};
+    const retryCount = (currentMeta.retryCount || 0) + 1;
+
+    await prisma.billingReminder.update({
+      where: { id: reminder.id },
+      data: {
+        status: NotificationDeliveryStatus.PENDING,
+        scheduledFor: new Date(),
+        failureReason: null,
+        failedAt: null,
+        metadata: {
+          ...currentMeta,
+          retryCount,
+          retriedAt: new Date().toISOString(),
+          retriedBy: userId,
+        },
+      },
+    });
+
+    if (userId) {
+      await this.audit.log({
+        tenantId,
+        userId,
+        action: 'BILLING_REMINDER_RETRIED',
+        resourceType: 'BILLING_REMINDER',
+        resourceId: reminder.id,
+        details: {
+          previousStatus: reminder.status,
+          retryCount,
+        },
+      });
+    }
+
+    return this.dispatchReminder(tenantId, reminder.id, userId);
+  }
+
   async getReminders(tenantId: string, query: BillingReminderQuery) {
     const where: any = { tenantId };
 

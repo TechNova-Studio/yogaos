@@ -13,3 +13,4 @@ export * from './renewals-gateways.js';
 export * from './asana.js';
 export * from './sequence.js';
 export * from './conductor.js';
+export * from './dashboard.js';

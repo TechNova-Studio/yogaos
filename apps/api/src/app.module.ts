@@ -15,6 +15,7 @@ import { MediaModule } from './modules/media/media.module.js';
 import { AsanaModule } from './modules/asana/asana.module.js';
 import { SequencesModule } from './modules/sequences/sequences.module.js';
 import { ConductorModule } from './modules/conductor/conductor.module.js';
+import { DashboardModule } from './modules/dashboard/dashboard.module.js';
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { ConductorModule } from './modules/conductor/conductor.module.js';
     AsanaModule,
     SequencesModule,
     ConductorModule,
+    DashboardModule,
   ],
 })
 export class AppModule {}

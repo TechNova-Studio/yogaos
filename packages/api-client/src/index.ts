@@ -116,6 +116,8 @@ import {
   ConductorSessionHistoryFilter,
   ConductorSessionHistoryResponse,
   ConductorExecutionEventDetail,
+  DashboardOperationsQuery,
+  DashboardOperationsData,
 } from '@yogaos/contracts';
 
 export interface ApiClientOptions {
@@ -1135,6 +1137,23 @@ export class ApiClient {
 
   async getConductorSessionEvents(sessionInstanceId: string): Promise<ConductorExecutionEventDetail[]> {
     return this.request<ConductorExecutionEventDetail[]>(`/conductor/sessions/${sessionInstanceId}/events`);
+  }
+
+  async getDashboardOperations(
+    query?: DashboardOperationsQuery
+  ): Promise<DashboardOperationsData> {
+    const params = new URLSearchParams();
+    if (query?.branchId) params.set('branchId', query.branchId);
+    if (query?.startDate) params.set('startDate', query.startDate);
+    if (query?.endDate) params.set('endDate', query.endDate);
+    const qs = params.toString() ? `?${params.toString()}` : '';
+    return this.request<DashboardOperationsData>(`/dashboard/operations${qs}`);
+  }
+
+  async retryBillingReminder(reminderId: string): Promise<any> {
+    return this.request<any>(`/billing/reminders/${reminderId}/retry`, {
+      method: 'POST',
+    });
   }
 }
 
