@@ -22,12 +22,36 @@ async function bootstrap() {
   );
 
   // Security & HTTP Middleware
+  const isProduction = env.NODE_ENV === 'production';
+  const allowedOrigins = process.env.CORS_ALLOWED_ORIGINS
+    ? process.env.CORS_ALLOWED_ORIGINS.split(',').map((o) => o.trim())
+    : [env.NEXT_PUBLIC_APP_URL, 'http://localhost:3000', 'http://127.0.0.1:3000'];
+
   await app.register(fastifyCors, {
-    origin: true,
+    origin: isProduction
+      ? (origin, callback) => {
+          if (!origin || allowedOrigins.includes(origin)) {
+            callback(null, true);
+          } else {
+            callback(new Error('CORS origin unauthorized by policy'), false);
+          }
+        }
+      : true,
     credentials: true,
   });
 
   await app.register(fastifyCookie);
+
+  // Security Headers Hook (Defense-in-Depth)
+  const fastifyInstance = app.getHttpAdapter().getInstance();
+  fastifyInstance.addHook('onSend', async (request: any, reply: any) => {
+    reply.header('X-Content-Type-Options', 'nosniff');
+    reply.header('X-Frame-Options', 'DENY');
+    reply.header('X-XSS-Protection', '0');
+    reply.header('Referrer-Policy', 'strict-origin-when-cross-origin');
+    reply.header('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+    reply.header('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  });
 
   // Global Exception Filter
   app.useGlobalFilters(new HttpExceptionFilter());

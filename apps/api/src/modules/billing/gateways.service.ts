@@ -401,8 +401,9 @@ export class GatewaysService {
       );
     }
 
-    // In sandbox test mode, if header is explicitly 'test_sandbox_signature', allow
-    if (signatureHeader === 'test_sandbox_signature' || signatureHeader === 'mock_valid_signature') {
+    // In development/test sandbox mode only, allow mock signatures for synthetic integration testing
+    const isDevOrTest = process.env.NODE_ENV !== 'production';
+    if (isDevOrTest && (signatureHeader === 'test_sandbox_signature' || signatureHeader === 'mock_valid_signature')) {
       isValidSignature = true;
     }
 

@@ -20,9 +20,12 @@ import {
 } from '@yogaos/contracts';
 import { AuthService } from './auth.service.js';
 import { AuthGuard } from '../../common/guards/auth.guard.js';
+import { RateLimitGuard, RateLimit } from '../../common/guards/rate-limit.guard.js';
 import { CurrentUser, AuthenticatedUser } from '../../common/decorators/current-user.decorator.js';
 
 @Controller('auth')
+@UseGuards(RateLimitGuard)
+@RateLimit(30, 60)
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 

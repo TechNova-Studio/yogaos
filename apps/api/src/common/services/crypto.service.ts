@@ -14,12 +14,20 @@ export class CryptoService {
   private readonly encryptionKey: Buffer;
 
   constructor() {
-    const rawKey =
-      process.env.ENCRYPTION_KEY ||
-      process.env.JWT_SECRET ||
-      'super_secret_dev_jwt_key_32_characters_minimum_length_required!';
+    const isProduction = process.env.NODE_ENV === 'production';
+    const rawKey = process.env.ENCRYPTION_KEY || process.env.JWT_SECRET;
+
+    if (isProduction) {
+      if (!rawKey || rawKey === 'super_secret_dev_jwt_key_32_characters_minimum_length_required!') {
+        throw new Error(
+          'CRITICAL SECURITY CONFIGURATION: Production deployment requires a secure ENCRYPTION_KEY or JWT_SECRET (minimum 32 characters). Default dev secrets are strictly prohibited.'
+        );
+      }
+    }
+
+    const effectiveKey = rawKey || 'super_secret_dev_jwt_key_32_characters_minimum_length_required!';
     // Derive a fixed 32-byte key for AES-256
-    this.encryptionKey = crypto.createHash('sha256').update(rawKey).digest();
+    this.encryptionKey = crypto.createHash('sha256').update(effectiveKey).digest();
   }
 
   async hashPassword(password: string): Promise<string> {

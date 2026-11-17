@@ -40,6 +40,10 @@ export class HttpExceptionFilter implements ExceptionFilter {
 
     if (status >= 500) {
       logger.error({ err: exception, path: request.url }, 'Unhandled Exception');
+      if (process.env.NODE_ENV === 'production') {
+        message = 'Internal server error';
+        details = undefined;
+      }
     }
 
     response.status(status).send({
