@@ -145,6 +145,10 @@ export class ApiClient {
     this.authToken = authToken;
   }
 
+  getBaseUrl(): string {
+    return this.baseUrl;
+  }
+
   private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`;
     const headers = new Headers(options.headers);
@@ -1159,9 +1163,12 @@ export class ApiClient {
 
 let clientInstance: ApiClient | null = null;
 
-export function getApiClient(baseUrl = 'http://localhost:4000/v1'): ApiClient {
-  if (!clientInstance) {
-    clientInstance = new ApiClient({ baseUrl });
+export function getApiClient(
+  baseUrl: string = (typeof process !== 'undefined' && process.env.NEXT_PUBLIC_API_URL) ? process.env.NEXT_PUBLIC_API_URL : 'http://localhost:4001/v1'
+): ApiClient {
+  const normalized = baseUrl.replace(/\/$/, '');
+  if (!clientInstance || clientInstance.getBaseUrl() !== normalized) {
+    clientInstance = new ApiClient({ baseUrl: normalized });
   }
   return clientInstance;
 }

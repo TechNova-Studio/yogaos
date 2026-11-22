@@ -27,7 +27,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  const client = getApiClient();
+  const client = getApiClient(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4001/v1');
 
   const refreshProfile = async () => {
     try {

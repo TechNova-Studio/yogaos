@@ -26,8 +26,11 @@ interface ClientRecord {
 @Injectable()
 export class RateLimitGuard implements CanActivate {
   private readonly clients = new Map<string, ClientRecord>();
+  private readonly reflector: Reflector;
 
-  constructor(private readonly reflector: Reflector) {}
+  constructor(reflector?: Reflector) {
+    this.reflector = reflector || new Reflector();
+  }
 
   canActivate(context: ExecutionContext): boolean {
     const config = this.reflector.getAllAndOverride<RateLimitConfig | undefined>(

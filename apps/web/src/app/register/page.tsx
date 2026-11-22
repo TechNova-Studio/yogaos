@@ -4,10 +4,12 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { getApiClient } from '@yogaos/api-client';
+import { useAuth } from '../../context/auth-context';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, Button } from '@yogaos/ui';
 
 export default function RegisterPage() {
   const router = useRouter();
+  const { login } = useAuth();
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
@@ -21,13 +23,14 @@ export default function RegisterPage() {
     setLoading(true);
 
     try {
-      const client = getApiClient();
+      const client = getApiClient(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4001/v1');
       await client.register({
         fullName,
         email,
         phone: phone || undefined,
         password,
       });
+      await login(email, password);
       router.push('/dashboard');
     } catch (err: any) {
       setError(err?.message || 'Registration failed. Please check inputs.');

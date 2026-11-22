@@ -4,7 +4,9 @@
   "private": true,
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
-    "dev": "tsx watch src/main.ts",
+    "dev:tsc": "tsc -p tsconfig.build.json -w --preserveWatchOutput",
+    "dev:node": "node --watch dist/main.js",
+    "dev": "tsc -p tsconfig.build.json && concurrently -k \"pnpm:dev:*\"",
     "start": "node dist/main.js",
     "clean": "rimraf dist",
     "typecheck": "tsc --noEmit",
@@ -32,6 +34,7 @@
     "@types/bcryptjs": "^3.0.0",
     "@types/node": "^22.13.9",
     "@types/supertest": "^7.2.1",
+    "concurrently": "^10.0.7",
     "rimraf": "^6.0.1",
     "supertest": "^7.3.2",
     "tsx": "^4.19.3",

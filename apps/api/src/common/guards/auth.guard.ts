@@ -13,10 +13,16 @@ import { AuthenticatedUser } from '../decorators/current-user.decorator.js';
 
 @Injectable()
 export class AuthGuard implements CanActivate {
+  private readonly crypto: CryptoService;
+  private readonly tenantContext: TenantContextService;
+
   constructor(
-    private readonly crypto: CryptoService,
-    private readonly tenantContext: TenantContextService
-  ) {}
+    crypto?: CryptoService,
+    tenantContext?: TenantContextService
+  ) {
+    this.crypto = crypto || new CryptoService();
+    this.tenantContext = tenantContext || new TenantContextService();
+  }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<FastifyRequest & { user?: AuthenticatedUser }>();
